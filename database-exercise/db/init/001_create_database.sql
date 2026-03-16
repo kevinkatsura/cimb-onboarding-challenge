@@ -1,11 +1,18 @@
-DO
-$$
-BEGIN
-   IF NOT EXISTS (
-      SELECT FROM pg_database
-      WHERE datname = 'go_db_exercise'
-   ) THEN
-      CREATE DATABASE go_db_exercise;
-   END IF;
-END
-$$;
+-- ==========================================
+-- DATABASE INITIALIZATION
+-- ==========================================
+
+DROP DATABASE IF EXISTS go_db_exercise;
+
+CREATE DATABASE go_db_exercise;
+
+\c go_db_exercise;
+
+-- ==========================================
+-- SCHEMA
+-- ==========================================
+
+CREATE SCHEMA IF NOT EXISTS app;
+
+SET search_path TO app;
+

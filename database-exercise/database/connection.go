@@ -12,6 +12,6 @@ func NewSQLXConnection(dsn string) (*sqlx.DB, error) {
 }
 
 func NewGormConnection(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open("host=localhost user=katsuke dbname=go_db_exercise sslmode=disable"), &gorm.Config{})
 	return db, err
 }

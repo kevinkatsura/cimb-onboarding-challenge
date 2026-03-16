@@ -23,6 +23,8 @@ func main() {
 	app := gin.Default()
 	app.POST("/users", userHandler.CreateUser)
 	app.GET("/users", userHandler.ListUsers)
+	app.GET("/users/:id", userHandler.GetUserByID)
+	app.DELETE("/users/:id", userHandler.DeleteUser)
 
-	app.Run(":8080")
+	app.Run(":8081")
 }
