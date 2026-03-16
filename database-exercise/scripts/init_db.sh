@@ -5,7 +5,7 @@ DB_NAME=go_db_exercise
 
 echo "Creating database if not exists..."
 
-psql -U $DB_USER -f db/init/001_create_database.sql
+psql -U $DB_USER -d postgres -f db/init/001_create_database.sql
 
 echo "Running migrations..."
 
