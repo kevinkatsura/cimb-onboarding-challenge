@@ -13,16 +13,16 @@ import (
 
 func main() {
 	cfg := config.LoadConfig()
-	db, err := database.NewGormConnection(cfg.DBSource)
+	db, err := database.NewSQLXConnection(cfg.DBSource)
 	if err != nil {
 		panic(err)
 	}
-	userRepo := repository.NewUserGormRepository(db)
+	userRepo := repository.NewUserSqlxRepository(db)
 	userService := service.NewUserService(userRepo)
 	userHandler := handler.NewUserHandler(userService)
 
 	router := server.NewRouter(userHandler)
-	port := ":8082"
+	port := ":8080"
 	srv := &http.Server{
 		Addr:    port,
 		Handler: router,
