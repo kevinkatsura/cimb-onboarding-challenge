@@ -1,11 +1,11 @@
 package handler
 
 import (
+	"database-exercise/internal/response"
 	"database-exercise/internal/service"
+	"encoding/json"
 	"net/http"
 	"strconv"
-
-	"github.com/gin-gonic/gin"
 )
 
 type UserHandler struct {
@@ -16,67 +16,80 @@ func NewUserHandler(service *service.UserService) *UserHandler {
 	return &UserHandler{service: service}
 }
 
-func (h *UserHandler) CreateUser(c *gin.Context) {
+func (h *UserHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name  string
 		Email string
 	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error(),
+			"invalid request body")
 		return
 	}
+
 	user, err := h.service.CreateUser(req.Name, req.Email)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
+		response.Error(w, http.StatusInternalServerError, err.Error(),
+			"failed to create user")
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	response.Success(w, user, "user created")
 }
 
-func (h *UserHandler) GetUserByID(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
-	user, err := h.service.GetUserByID(int64(id))
+func (h *UserHandler) GetUserByID(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	if idStr == "" {
+		response.Error(w, http.StatusBadRequest, nil,
+			"Missing user id")
+		return
+	}
 
+	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
+		response.Error(w, http.StatusBadRequest, err,
+			"Invalid id format")
 		return
 	}
-	c.JSON(http.StatusOK, user)
+
+	user, err := h.service.GetUserByID(int64(id))
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, err,
+			"failed to fetch user with id:"+idStr)
+		return
+	}
+	response.Success(w, user, "")
 }
 
-func (h *UserHandler) ListUsers(c *gin.Context) {
+func (h *UserHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	users, err := h.service.ListUsers()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
+		response.Error(w, http.StatusInternalServerError, err.Error(),
+			"failed to fetch users")
 		return
 	}
-	c.JSON(http.StatusOK, users)
+	response.Success(w, users, "")
 }
 
-func (h *UserHandler) DeleteUser(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "invalid user id",
-		})
+func (h *UserHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
+	idStr := r.PathValue("id")
+	if idStr == "" {
+		response.Error(w, http.StatusBadRequest, nil,
+			"Missing user id")
 		return
 	}
+
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, nil,
+			"Invalid id format")
+		return
+	}
+
 	err = h.service.DeleteUser(int64(id))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
-		})
+		response.Error(w, http.StatusInternalServerError, err,
+			"failed to delete user with id:"+idStr)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"message": "User deleted successfully",
-	})
+	response.Success(w, nil, "user id:"+idStr+" deleted successfully")
 }
