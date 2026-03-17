@@ -22,7 +22,7 @@ func main() {
 	userHandler := handler.NewUserHandler(userService)
 
 	router := server.NewRouter(userHandler)
-	port := ":8080"
+	port := ":8083"
 	srv := &http.Server{
 		Addr:    port,
 		Handler: router,

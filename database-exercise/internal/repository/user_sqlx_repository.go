@@ -17,14 +17,14 @@ func (r *UserSqlxRepository) Create(user *model.User) error {
 
 func (r *UserSqlxRepository) GetByID(id int64) (*model.User, error) {
 	var user model.User
-	query := `SELECT id, name, email, created_at FROM users WHERE id = $1`
+	query := `SELECT id, name, email FROM users WHERE id = $1`
 	err := r.db.Get(&user, query, id)
 	return &user, err
 }
 
 func (r *UserSqlxRepository) List() ([]model.User, error) {
 	var users []model.User
-	query := `SELECT id, name, email, created_at FROM users`
+	query := `SELECT id, name, email FROM users`
 	err := r.db.Select(&users, query)
 	return users, err
 }
