@@ -1,4 +1,4 @@
-package service
+package server
 
 import (
 	"database-exercise/internal/response"
