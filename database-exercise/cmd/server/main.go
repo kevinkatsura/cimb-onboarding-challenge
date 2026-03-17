@@ -22,10 +22,11 @@ func main() {
 	userHandler := handler.NewUserHandler(userService)
 
 	router := server.NewRouter(userHandler)
+	port := ":8082"
 	srv := &http.Server{
-		Addr:    ":8081",
+		Addr:    port,
 		Handler: router,
 	}
-	log.Println("Server is running on port 8081")
+	log.Println("Server is running on port " + port)
 	log.Fatal(srv.ListenAndServe())
 }
