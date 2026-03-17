@@ -5,9 +5,10 @@ import (
 	"database-exercise/database"
 	"database-exercise/internal/handler"
 	"database-exercise/internal/repository"
+	"database-exercise/internal/server"
 	"database-exercise/internal/service"
-
-	"github.com/gin-gonic/gin"
+	"log"
+	"net/http"
 )
 
 func main() {
@@ -20,11 +21,11 @@ func main() {
 	userService := service.NewUserService(userRepo)
 	userHandler := handler.NewUserHandler(userService)
 
-	app := gin.Default()
-	app.POST("/users", userHandler.CreateUser)
-	app.GET("/users", userHandler.ListUsers)
-	app.GET("/users/:id", userHandler.GetUserByID)
-	app.DELETE("/users/:id", userHandler.DeleteUser)
-
-	app.Run(":8081")
+	router := server.NewRouter(userHandler)
+	srv := &http.Server{
+		Addr:    ":8081",
+		Handler: router,
+	}
+	log.Println("Server is running on port 8081")
+	log.Fatal(srv.ListenAndServe())
 }
