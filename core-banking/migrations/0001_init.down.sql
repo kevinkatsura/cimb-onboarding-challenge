@@ -4,11 +4,8 @@ DROP MATERIALIZED VIEW IF EXISTS account_balances;
 -- Ensure each transaction is balanced
 DROP FUNCTION IF EXISTS validate_transaction_balance(tx_id UUID);
 
--- Indexes
-DROP INDEX IF EXISTS idx_journal_entries_transaction_id;
-DROP INDEX IF EXISTS idx_ledger_entries_journal_id;
-DROP INDEX IF EXISTS idx_ledger_entries_account_id;
-DROP INDEX IF EXISTS idx_accounts_customer_id;
+-- Drop constraint
+ALTER TABLE accounts DROP CONSTRAINT check_balance_non_negative;
 
 -- Tables
 DROP TABLE IF EXISTS fx_rates;

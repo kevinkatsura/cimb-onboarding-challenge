@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS customer_documents (
 
     expires_at DATE, 
     created_at TIMESTAMP DEFAULT NOW()
-)
+);
 
 -- Accounts 
 CREATE TABLE IF NOT EXISTS accounts (
@@ -61,7 +61,10 @@ CREATE TABLE IF NOT EXISTS accounts (
     closed_at TIMESTAMP,
 
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+
+    -- Table constraints
+    CONSTRAINT check_balance_non_negative CHECK(available_balance >= -overdraft_limit)
 );
 
 -- Transactions (logical event)
@@ -87,7 +90,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 -- Ledger (Journal Header)
-CREATE TABLE journal_entries (
+CREATE TABLE IF NOT EXISTS journal_entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_id UUID NOT NULL REFERENCES transactions(id),
 
@@ -116,7 +119,7 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
 );
 
 -- Payments (external movement)
-CREATE TABLE payments (
+CREATE TABLE IF NOT EXISTS payments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     transaction_id UUID NOT NULL REFERENCES transactions(id),
@@ -135,7 +138,7 @@ CREATE TABLE payments (
 );
 
 -- Audit logs (compliance)
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     actor_id UUID,
@@ -152,7 +155,7 @@ CREATE TABLE audit_logs (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE idempotency_keys (
+CREATE TABLE IF NOT EXISTS idempotency_keys (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     key TEXT UNIQUE NOT NULL,
@@ -161,9 +164,9 @@ CREATE TABLE idempotency_keys (
     response JSONB,
 
     created_at TIMESTAMP DEFAULT NOW()
-)
+);
 
-CREATE TABLE fx_rates (
+CREATE TABLE IF NOT EXISTS fx_rates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     base_currency CHAR(3) NOT NULL,
@@ -172,12 +175,7 @@ CREATE TABLE fx_rates (
     rate NUMERIC(20, 8) NOT NULL,
     
     effective_at TIMESTAMP NOT NULL
-)
-
-CREATE INDEX idx_accounts_customer_id ON accounts(customer_id);
-CREATE INDEX idx_journal_entries_transaction_id ON journal_entries(transaction_id);
-CREATE INDEX idx_ledger_entries_journal_id ON ledger_entries(journal_id);
-CREATE INDEX idx_ledger_entries_account_id ON ledger_entries(account_id);
+);
 
 -- Ensure each transaction is balanced
 CREATE FUNCTION validate_transaction_balance(tx_id UUID) 
