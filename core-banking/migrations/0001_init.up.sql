@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS accounts (
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
 
+    deleted_at TIMESTAMP,
+
     -- Table constraints
     CONSTRAINT check_balance_non_negative CHECK(available_balance >= -overdraft_limit)
 );
