@@ -57,8 +57,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := ListFilter{
-		Limit:  limit,
-		Cursor: cursor,
+		Limit:     limit,
+		Cursor:    cursor,
+		Direction: q.Get("direction"),
 	}
 
 	if v := q.Get("customer_id"); v != "" {
@@ -74,7 +75,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		filter.Currency = &v
 	}
 
-	data, total, nextCursor, err := h.service.ListAccounts(r.Context(), filter)
+	data, total, nextCursor, prevCursor, err := h.service.ListAccounts(r.Context(), filter)
 	if err != nil {
 		response.JSON(w, http.StatusInternalServerError, response.APIResponse{Error: err.Error()})
 		return
@@ -85,6 +86,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		Meta: map[string]interface{}{
 			"limit":       limit,
 			"next_cursor": nextCursor,
+			"prev_cursor": prevCursor,
 			"total":       total,
 		},
 	})
