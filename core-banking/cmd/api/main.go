@@ -18,6 +18,8 @@ func main() {
 	txHandler := transaction.NewHandler(txService)
 
 	http.HandleFunc("POST /transfer", txHandler.Transfer)
+	http.HandleFunc("GET /transactions", txHandler.ListAll)
+	http.HandleFunc("GET /accounts/{id}/transactions", txHandler.ListByAccount)
 
 	// Account
 	accountRepo := account.NewRepository(db)
