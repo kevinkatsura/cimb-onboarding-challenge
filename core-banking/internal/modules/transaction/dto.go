@@ -3,6 +3,7 @@ package transaction
 import "time"
 
 type TransactionHistoryDTO struct {
+	LedgerEntryID string `db:"ledger_entry_id" json:"ledger_entry_id"`
 	TransactionID string `db:"transaction_id" json:"transaction_id"`
 	ReferenceID   string `db:"reference_id" json:"reference_id"`
 	ExternalRef   string `db:"external_reference" json:"external_reference"`
