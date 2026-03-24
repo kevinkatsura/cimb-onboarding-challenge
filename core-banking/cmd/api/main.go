@@ -24,11 +24,29 @@ func main() {
 	accountService := account.NewService(accountRepo)
 	accountHandler := account.NewHandler(accountService)
 
-	http.HandleFunc("POST /accounts", accountHandler.Create)
-	http.HandleFunc("GET /accounts", accountHandler.ListAll)
-	http.HandleFunc("GET /accounts/{id}", accountHandler.Get)
-	http.HandleFunc("PATCH /accounts/{id}", accountHandler.UpdateStatus)
-	http.HandleFunc("DELETE /accounts/{id}", accountHandler.Delete)
+	http.HandleFunc("/accounts", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			accountHandler.ListAll(w, r)
+		case http.MethodPost:
+			accountHandler.Create(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	http.HandleFunc("/accounts/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			accountHandler.Get(w, r)
+		case http.MethodPatch:
+			accountHandler.UpdateStatus(w, r)
+		case http.MethodDelete:
+			accountHandler.Delete(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
 
 	http.HandleFunc("GET /customers/{id}/accounts", accountHandler.List)
 
