@@ -1,4 +1,4 @@
-package account
+package pagination
 
 import (
 	"encoding/base64"

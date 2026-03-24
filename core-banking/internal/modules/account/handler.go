@@ -1,6 +1,7 @@
 package account
 
 import (
+	"core-banking/internal/pkg/pagination"
 	"core-banking/internal/pkg/response"
 	"encoding/json"
 	"fmt"
@@ -50,7 +51,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	limit := 20
 	fmt.Sscanf(q.Get("limit"), "%d", &limit)
 
-	cursor, err := DecodeCursor(q.Get("cursor"))
+	cursor, err := pagination.DecodeCursor(q.Get("cursor"))
 	if err != nil {
 		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: "invalid cursor"})
 		return

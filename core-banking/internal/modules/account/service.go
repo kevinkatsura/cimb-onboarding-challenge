@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"core-banking/internal/database"
+	"core-banking/internal/pkg/pagination"
 	"crypto/rand"
 	"fmt"
 	"math/big"
@@ -79,10 +80,10 @@ func (s *Service) ListAccounts(ctx context.Context, f ListFilter) ([]Account, in
 
 	var nextCursor, prevCursor string
 	if nextC != nil {
-		nextCursor, _ = EncodeCursor(*nextC)
+		nextCursor, _ = pagination.EncodeCursor(*nextC)
 	}
 	if prevC != nil {
-		prevCursor, _ = EncodeCursor(*prevC)
+		prevCursor, _ = pagination.EncodeCursor(*prevC)
 	}
 
 	return accounts, total, nextCursor, prevCursor, nil

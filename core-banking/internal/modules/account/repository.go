@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"core-banking/internal/pkg/pagination"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -22,7 +23,7 @@ type ListFilter struct {
 	Currency    *string
 
 	Limit     int
-	Cursor    *Cursor
+	Cursor    *pagination.Cursor
 	Direction string // "next" or "prev"
 }
 
@@ -69,7 +70,7 @@ func (r *Repository) GetByID(id string) (*Account, error) {
 	return &acc, err
 }
 
-func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *Cursor, *Cursor, error) {
+func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *pagination.Cursor, *pagination.Cursor, error) {
 	var accounts []Account
 	var total int
 
@@ -158,17 +159,17 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *C
 	}
 
 	// Build cursor
-	var nextCursor, prevCursor *Cursor
+	var nextCursor, prevCursor *pagination.Cursor
 
 	if len(accounts) > 0 {
 		first := accounts[0]
 		last := accounts[len(accounts)-1]
 
-		prevCursor = &Cursor{
+		prevCursor = &pagination.Cursor{
 			CreatedAt: first.CreatedAt,
 			ID:        first.ID,
 		}
-		nextCursor = &Cursor{
+		nextCursor = &pagination.Cursor{
 			CreatedAt: last.CreatedAt,
 			ID:        last.ID,
 		}
