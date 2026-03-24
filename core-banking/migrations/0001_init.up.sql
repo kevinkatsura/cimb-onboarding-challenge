@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
 
 -- Entries (actual money movement), Ledge lines (double entry core)
 CREATE TABLE IF NOT EXISTS ledger_entries (
-    id UUID PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     journal_id UUID NOT NULL REFERENCES journal_entries(id),
     account_id UUID NOT NULL REFERENCES accounts(id),
