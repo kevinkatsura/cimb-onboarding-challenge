@@ -44,38 +44,50 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, response.APIResponse{Data: acc})
 }
 
-func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
+func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
 
 	limit := 20
-	offset := 0
+	fmt.Sscanf(q.Get("limit"), "%d", &limit)
 
-	if l := query.Get("limit"); l != "" {
-		fmt.Sscanf(l, "%d", &limit)
-	}
-	if o := query.Get("offset"); o != "" {
-		fmt.Sscanf(o, "%d", &offset)
+	cursor, err := DecodeCursor(q.Get("cursor"))
+	if err != nil {
+		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: "invalid cursor"})
+		return
 	}
 
-	accounts, err := h.service.ListAllAccounts(r.Context(), limit, offset)
+	filter := ListFilter{
+		Limit:  limit,
+		Cursor: cursor,
+	}
+
+	if v := q.Get("customer_id"); v != "" {
+		filter.CustomerID = &v
+	}
+	if v := q.Get("account_type"); v != "" {
+		filter.AccountType = &v
+	}
+	if v := q.Get("status"); v != "" {
+		filter.Status = &v
+	}
+	if v := q.Get("currency"); v != "" {
+		filter.Currency = &v
+	}
+
+	data, total, nextCursor, err := h.service.ListAccounts(r.Context(), filter)
 	if err != nil {
 		response.JSON(w, http.StatusInternalServerError, response.APIResponse{Error: err.Error()})
 		return
 	}
 
-	response.JSON(w, http.StatusOK, response.APIResponse{Data: accounts})
-}
-
-func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	customerID := r.PathValue("id")
-
-	accs, err := h.service.ListAccounts(r.Context(), customerID)
-	if err != nil {
-		response.JSON(w, http.StatusInternalServerError, response.APIResponse{Error: err.Error()})
-		return
-	}
-
-	response.JSON(w, http.StatusOK, response.APIResponse{Data: accs})
+	response.JSON(w, http.StatusOK, response.APIResponse{
+		Data: data,
+		Meta: map[string]interface{}{
+			"limit":       limit,
+			"next_cursor": nextCursor,
+			"total":       total,
+		},
+	})
 }
 
 func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {

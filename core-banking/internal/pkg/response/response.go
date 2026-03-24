@@ -6,10 +6,11 @@ import (
 )
 
 type APIResponse struct {
-	Success bool        `json:"success"`
-	Message string      `json:"message,omitempty"`
-	Data    interface{} `json:"data,omitempty"`
-	Error   interface{} `json:"error,omitempty"`
+	Success bool                   `json:"success"`
+	Message string                 `json:"message,omitempty"`
+	Data    interface{}            `json:"data,omitempty"`
+	Error   interface{}            `json:"error,omitempty"`
+	Meta    map[string]interface{} `json:"meta"`
 }
 
 func JSON(w http.ResponseWriter, status int, resp APIResponse) {
