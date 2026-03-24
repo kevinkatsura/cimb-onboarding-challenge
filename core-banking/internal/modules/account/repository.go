@@ -20,8 +20,10 @@ type ListFilter struct {
 	Status      *string
 	AccountType *string
 	Currency    *string
-	Limit       int
-	Cursor      *Cursor
+
+	Limit     int
+	Cursor    *Cursor
+	Direction string // "next" or "prev"
 }
 
 func (r *Repository) Create(tx *sqlx.Tx, acc *Account) error {
@@ -67,7 +69,7 @@ func (r *Repository) GetByID(id string) (*Account, error) {
 	return &acc, err
 }
 
-func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *Cursor, error) {
+func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *Cursor, *Cursor, error) {
 	var accounts []Account
 	var total int
 
@@ -102,8 +104,16 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *C
 	}
 
 	// Cursor condition
+	order := "ORDER BY created_at DESC, id DESC"
+
 	if f.Cursor != nil {
-		base += fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", idx, idx+1)
+		if f.Direction == "prev" {
+			base += fmt.Sprintf(" AND (created_at, id) > ($%d, $%d)", idx, idx+1)
+			order = "ORDER BY created_at ASC, id ASC"
+		} else {
+			// default
+			base += fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", idx, idx+1)
+		}
 		args = append(args, f.Cursor.CreatedAt, f.Cursor.ID)
 		idx += 2
 	}
@@ -112,10 +122,10 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *C
 	countQuery := "SELECT COUNT(*) " + base
 	err := r.DB.GetContext(ctx, &total, countQuery, args...)
 	if err != nil {
-		return nil, 0, nil, err
+		return nil, 0, nil, nil, err
 	}
 
-	// Assemble main query
+	// Main query
 	query := `
 		SELECT	id,
 				customer_id,
@@ -129,27 +139,42 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *C
 				opened_at,
 				closed_at,
 				created_at,
-				updated_at` + base +
-		`ORDER BY created_at DESC, id DESC
-		LIMIT $` + string(idx)
+				updated_at
+				` + base + `
+				` + order + `
+				LIMIT $` + string(idx)
 	args = append(args, f.Limit)
 
 	err = r.DB.SelectContext(ctx, &accounts, query, args...)
 	if err != nil {
-		return nil, 0, nil, err
+		return nil, 0, nil, nil, err
 	}
 
-	// Next cursor
-	var nextCursor *Cursor
+	// Reverse result if direction=prev
+	if f.Direction == "prev" {
+		for i, j := 0, len(accounts)-1; i < j; i, j = i+1, j-1 {
+			accounts[i], accounts[j] = accounts[j], accounts[i]
+		}
+	}
+
+	// Build cursor
+	var nextCursor, prevCursor *Cursor
+
 	if len(accounts) > 0 {
+		first := accounts[0]
 		last := accounts[len(accounts)-1]
+
+		prevCursor = &Cursor{
+			CreatedAt: first.CreatedAt,
+			ID:        first.ID,
+		}
 		nextCursor = &Cursor{
 			CreatedAt: last.CreatedAt,
 			ID:        last.ID,
 		}
 	}
 
-	return accounts, total, nextCursor, nil
+	return accounts, total, nextCursor, prevCursor, nil
 }
 
 func (r *Repository) UpdateStatus(tx *sqlx.Tx, id string, status string) error {
