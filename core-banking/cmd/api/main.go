@@ -27,7 +27,7 @@ func main() {
 	http.HandleFunc("/accounts", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			accountHandler.ListAll(w, r)
+			accountHandler.List(w, r)
 		case http.MethodPost:
 			accountHandler.Create(w, r)
 		default:
@@ -47,8 +47,6 @@ func main() {
 			http.NotFound(w, r)
 		}
 	})
-
-	http.HandleFunc("GET /customers/{id}/accounts", accountHandler.List)
 
 	port := os.Getenv("PORT")
 	log.Println("server running on " + port)
