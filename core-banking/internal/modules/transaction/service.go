@@ -3,6 +3,7 @@ package transaction
 import (
 	"context"
 	"core-banking/internal/database"
+	"core-banking/internal/pkg/pagination"
 	"fmt"
 )
 
@@ -107,4 +108,28 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) error {
 
 		return tx.Commit()
 	})
+}
+
+func (s *Service) List(ctx context.Context, f ListFilter) ([]TransactionHistoryDTO, int, string, string, error) {
+	if f.Limit <= 0 || f.Limit > 100 {
+		f.Limit = 20
+	}
+	if f.Direction == "" {
+		f.Direction = "next"
+	}
+
+	data, total, nextC, prevC, err := s.repo.List(ctx, f)
+	if err != nil {
+		return nil, 0, "", "", err
+	}
+
+	var nextCursor, prevCursor string
+	if nextC != nil {
+		nextCursor, _ = pagination.EncodeCursor(*nextC)
+	}
+	if prevC != nil {
+		prevCursor, _ = pagination.EncodeCursor(*prevC)
+	}
+
+	return data, total, nextCursor, prevCursor, nil
 }
