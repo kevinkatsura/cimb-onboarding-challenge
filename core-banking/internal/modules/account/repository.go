@@ -1,6 +1,11 @@
 package account
 
-import "github.com/jmoiron/sqlx"
+import (
+	"context"
+	"fmt"
+
+	"github.com/jmoiron/sqlx"
+)
 
 type Repository struct {
 	DB *sqlx.DB
@@ -8,6 +13,15 @@ type Repository struct {
 
 func NewRepository(db *sqlx.DB) *Repository {
 	return &Repository{DB: db}
+}
+
+type ListFilter struct {
+	CustomerID  *string
+	Status      *string
+	AccountType *string
+	Currency    *string
+	Limit       int
+	Cursor      *Cursor
 }
 
 func (r *Repository) Create(tx *sqlx.Tx, acc *Account) error {
@@ -53,11 +67,57 @@ func (r *Repository) GetByID(id string) (*Account, error) {
 	return &acc, err
 }
 
-func (r *Repository) ListAll(limit, offset int) ([]Account, error) {
+func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *Cursor, error) {
 	var accounts []Account
+	var total int
 
+	// Base query
+	base := `
+		FROM accounts
+		WHERE deleted_at IS NULL`
+
+	args := []interface{}{}
+	idx := 1
+
+	// Filters
+	if f.CustomerID != nil {
+		base += fmt.Sprintf(" AND customer_id = $%d", idx)
+		args = append(args, *f.CustomerID)
+		idx++
+	}
+	if f.Status != nil {
+		base += fmt.Sprintf(" AND status = $%d", idx)
+		args = append(args, *f.Status)
+		idx++
+	}
+	if f.AccountType != nil {
+		base += fmt.Sprintf(" AND account_type = $%d", idx)
+		args = append(args, *f.AccountType)
+		idx++
+	}
+	if f.Currency != nil {
+		base += fmt.Sprintf(" AND currency = $%d", idx)
+		args = append(args, *f.Currency)
+		idx++
+	}
+
+	// Cursor condition
+	if f.Cursor != nil {
+		base += fmt.Sprintf(" AND (created_at, id) < ($%d, $%d)", idx, idx+1)
+		args = append(args, f.Cursor.CreatedAt, f.Cursor.ID)
+		idx += 2
+	}
+
+	// Total count (separate query)
+	countQuery := "SELECT COUNT(*) " + base
+	err := r.DB.GetContext(ctx, &total, countQuery, args...)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+
+	// Assemble main query
 	query := `
-		SELECT 	id,
+		SELECT	id,
 				customer_id,
 				account_number,
 				account_type,
@@ -69,32 +129,27 @@ func (r *Repository) ListAll(limit, offset int) ([]Account, error) {
 				opened_at,
 				closed_at,
 				created_at,
-				updated_at
-		FROM accounts WHERE deleted_at IS NULL
-		ORDER BY created_at DESC
-		`
-	err := r.DB.Select(&accounts, query, limit, offset)
-	return accounts, err
-}
+				updated_at` + base +
+		`ORDER BY created_at DESC, id DESC
+		LIMIT $` + string(idx)
+	args = append(args, f.Limit)
 
-func (r *Repository) ListByCustomer(customerID string) ([]Account, error) {
-	var accounts []Account
-	err := r.DB.Select(&accounts, `
-		SELECT 	id,
-				customer_id,
-				account_number,
-				account_type,
-				currency,
-				status,
-				available_balance,
-				pending_balance,
-				overdraft_limit,
-				opened_at,
-				closed_at,
-				created_at,
-				updated_at
-		FROM accounts WHERE customer_id=$1 ORDER BY created_at DESC`, customerID)
-	return accounts, err
+	err = r.DB.SelectContext(ctx, &accounts, query, args...)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+
+	// Next cursor
+	var nextCursor *Cursor
+	if len(accounts) > 0 {
+		last := accounts[len(accounts)-1]
+		nextCursor = &Cursor{
+			CreatedAt: last.CreatedAt,
+			ID:        last.ID,
+		}
+	}
+
+	return accounts, total, nextCursor, nil
 }
 
 func (r *Repository) UpdateStatus(tx *sqlx.Tx, id string, status string) error {
