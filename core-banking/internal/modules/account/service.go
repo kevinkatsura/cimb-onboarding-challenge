@@ -64,12 +64,22 @@ func (s *Service) GetAccount(ctx context.Context, id string) (*Account, error) {
 	return s.repo.GetByID(id)
 }
 
-func (s *Service) ListAllAccounts(cts context.Context, limit, offset int) ([]Account, error) {
-	return s.repo.ListAll(limit, offset)
-}
+func (s *Service) ListAccounts(ctx context.Context, f ListFilter) ([]Account, int, string, error) {
+	if f.Limit <= 0 || f.Limit > 100 {
+		f.Limit = 20
+	}
 
-func (s *Service) ListAccounts(ctx context.Context, customerID string) ([]Account, error) {
-	return s.repo.ListByCustomer(customerID)
+	accounts, total, nextCursor, err := s.repo.List(ctx, f)
+	if err != nil {
+		return nil, 0, "", err
+	}
+
+	var cursorStr string
+	if nextCursor != nil {
+		cursorStr, _ = EncodeCursor(*nextCursor)
+	}
+
+	return accounts, total, cursorStr, nil
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, id string, status string) error {
