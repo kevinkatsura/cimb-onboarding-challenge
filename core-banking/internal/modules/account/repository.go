@@ -53,6 +53,30 @@ func (r *Repository) GetByID(id string) (*Account, error) {
 	return &acc, err
 }
 
+func (r *Repository) ListAll(limit, offset int) ([]Account, error) {
+	var accounts []Account
+
+	query := `
+		SELECT 	id,
+				customer_id,
+				account_number,
+				account_type,
+				currency,
+				status,
+				available_balance,
+				pending_balance,
+				overdraft_limit,
+				opened_at,
+				closed_at,
+				created_at,
+				updated_at
+		FROM accounts WHERE deleted_at IS NULL
+		ORDER BY created_at DESC
+		`
+	err := r.DB.Select(&accounts, query, limit, offset)
+	return accounts, err
+}
+
 func (r *Repository) ListByCustomer(customerID string) ([]Account, error) {
 	var accounts []Account
 	err := r.DB.Select(&accounts, `
@@ -80,5 +104,13 @@ func (r *Repository) UpdateStatus(tx *sqlx.Tx, id string, status string) error {
 			updated_at=NOW(),
 			closed_at=CASE WHEN $1='closed' THEN NOW() ELSE NULL END
 		WHERE id=$2`, status, id)
+	return err
+}
+
+func (r *Repository) SoftDelete(tx *sqlx.Tx, id string) error {
+	_, err := tx.Exec(`
+		UPDATE accounts
+		SET deleted_at=NOW(), status='closed', updated_at=NOW()
+		WHERE id=$1 AND deleted_at IS NULL`, id)
 	return err
 }
