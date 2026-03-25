@@ -83,7 +83,7 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]TransactionHisto
 		le.id AS ledger_entry_id,
 
 		tx.id AS transaction_id,
-		tx.reference_id
+		tx.reference_id,
 		tx.external_reference,
 		
 		le.account_id,
@@ -104,7 +104,7 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]TransactionHisto
 		tx.completed_at
 		` + base + `
 		` + order + `
-		LIMIT $` + string(idx)
+		LIMIT $` + fmt.Sprint(idx)
 	args = append(args, f.Limit)
 
 	err := r.DB.SelectContext(ctx, &results, query, args...)

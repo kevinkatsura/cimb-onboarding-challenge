@@ -38,7 +38,7 @@ func (r *Repository) Create(tx *sqlx.Tx, acc *Account) error {
 		status,
 		overdraft_limit)
 	VALUES(gen_random_uuid(), $1, $2, $3, $4, 'active', $5)
-	RETURNING id, created_at, updated_at, opened_at`
+	RETURNING id, created_at, updated_at, opened_at;`
 
 	return tx.QueryRowx(
 		query,
@@ -66,7 +66,7 @@ func (r *Repository) GetByID(id string) (*Account, error) {
 				closed_at,
 				created_at,
 				updated_at
-		FROM accounts WHERE id=$1`, id)
+		FROM accounts WHERE id=$1;`, id)
 	return &acc, err
 }
 
@@ -143,7 +143,7 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *p
 				updated_at
 				` + base + `
 				` + order + `
-				LIMIT $` + string(idx)
+				LIMIT $` + fmt.Sprint(idx)
 	args = append(args, f.Limit)
 
 	err = r.DB.SelectContext(ctx, &accounts, query, args...)
@@ -184,7 +184,7 @@ func (r *Repository) UpdateStatus(tx *sqlx.Tx, id string, status string) error {
 		SET	status=$1,
 			updated_at=NOW(),
 			closed_at=CASE WHEN $1='closed' THEN NOW() ELSE NULL END
-		WHERE id=$2`, status, id)
+		WHERE id=$2;`, status, id)
 	return err
 }
 
@@ -192,6 +192,6 @@ func (r *Repository) SoftDelete(tx *sqlx.Tx, id string) error {
 	_, err := tx.Exec(`
 		UPDATE accounts
 		SET deleted_at=NOW(), status='closed', updated_at=NOW()
-		WHERE id=$1 AND deleted_at IS NULL`, id)
+		WHERE id=$1 AND deleted_at IS NULL;`, id)
 	return err
 }
