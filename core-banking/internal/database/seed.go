@@ -1,105 +1,113 @@
 package database
 
-// import (
-// 	"log"
+import (
+	"context"
+	"fmt"
+	"math/rand"
+	"time"
 
-// 	"github.com/google/uuid"
-// 	"github.com/jmoiron/sqlx"
-// )
+	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+)
 
-// func Seed(db *sqlx.DB) {
-// 	tx, err := db.Beginx()
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+type Seeder struct {
+	db *sqlx.DB
+}
 
-// 	defer tx.Rollback()
+func New(db *sqlx.DB) *Seeder {
+	return &Seeder{db: db}
+}
 
-// 	// ---- Customers ----
-// 	customerID := uuid.New()
-// 	_, err = tx.Exec(`
-// 		INSERT INTO customers (
-// 			id, full_name, data_of_birth, nationality,
-// 			email, phone_number, kyc_status, risk_level
-// 		)
-// 		VALUES ($1, 'John Doe', '1990-01-01', 'ID',
-// 		        'john@example.com', '+6281234567890', 'verified', 'low')
-// 	`, customerID)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+func (s *Seeder) Seed(ctx context.Context) error {
+	tx, err := BeginSerializableTx(ctx, s.db)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
 
-// 	// ---- Account ----
-// 	accountID := uuid.New()
-// 	_, err = tx.Exec(`
-// 		INSERT INTO accounts (
-// 			id, customer_id, account_number, account_type,
-// 			currency, status, available_balance
-// 		)
-// 		VALUES ($1, $2, '1234567890', 'savings', 'IDR', 'active', 1000000)
-// 	`, accountID, customerID)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+	customers := generateCustomers(50)
+	accounts := generateAccounts(customers)
 
-// 	// ---- Transaction ----
-// 	txID := uuid.New()
-// 	_, err = tx.Exec(`
-// 		INSERT INTO transactions (
-// 			id, reference_id, transaction_type,
-// 			status, amount, currency
-// 		)
-// 		VALUES ($1, 'ref-001', 'deposit', 'completed', 1000000, 'IDR')
-// 	`, txID)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+	if err := insertCustomers(ctx, tx, customers); err != nil {
+		return err
+	}
 
-// 	// ---- Journal Entry ----
-// 	journalID := uuid.New()
-// 	_, err = tx.Exec(`
-// 		INSERT INTO journal_entries (
-// 			id, transaction_id, journal_type
-// 		)
-// 		VALUES ($1, $2, 'deposit')
-// 	`, journalID, txID)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+	if err := insertAccounts(ctx, tx, accounts); err != nil {
+		return err
+	}
 
-// 	// ---- Ledger Entries (double entry) ----
-// 	ledger1 := uuid.New()
-// 	ledger2 := uuid.New()
+	return tx.Commit()
+}
 
-// 	_, err = tx.Exec(`
-// 		INSERT INTO ledger_entries (
-// 			id, journal_id, account_id, entry_type,
-// 			amount, currency
-// 		)
-// 		VALUES
-// 		($1, $2, $3, 'debit', 1000000, 'IDR'),
-// 		($4, $2, $3, 'credit', 1000000, 'IDR')
-// 	`, ledger1, journalID, accountID, ledger2)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+// Customer
+type Customer struct {
+	ID        uuid.UUID `db:"id"`
+	FullName  string    `db:"full_name"`
+	Email     string    `db:"email"`
+	CreatedAt time.Time `db:"created_at"`
+}
 
-// 	// ---- Payment ----
-// 	paymentID := uuid.New()
-// 	_, err = tx.Exec(`
-// 		INSERT INTO payments (
-// 			id, transaction_id, payment_method, status
-// 		)
-// 		VALUES ($1, $2, 'bank_transfer', 'settled')
-// 	`, paymentID, txID)
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+func generateCustomers(n int) []Customer {
+	rand.Seed(time.Now().UnixNano())
 
-// 	err = tx.Commit()
-// 	if err != nil {
-// 		log.Fatal(err)
-// 	}
+	customers := make([]Customer, 0, n)
 
-// 	log.Println("Seed data inserted successfully")
-// }
+	for i := 0; i < n; i++ {
+		id := uuid.New()
+
+		customers = append(customers, Customer{
+			ID:        id,
+			FullName:  fmt.Sprintf("Customer %d", i+1),
+			Email:     fmt.Sprintf("customer%d@example.com", i+1),
+			CreatedAt: time.Now().Add(-time.Duration(rand.Intn(1000)) * time.Hour),
+		})
+	}
+
+	return customers
+}
+
+type Account struct {
+	CustomerID uuid.UUID `db:"customer_id"`
+	Number     string    `db:"account_number"`
+	Balance    int64     `db:"balance"`
+	Currency   string    `db:"currency"`
+	CreatedAt  time.Time `db:"created_at"`
+}
+
+func generateAccounts(customers []Customer) []Account {
+	rand.Seed(time.Now().UnixNano())
+
+	accounts := make([]Account, 0, len(customers))
+
+	for i, c := range customers {
+		accounts = append(accounts, Account{
+			CustomerID: c.ID,
+			Number:     fmt.Sprintf("ACC%06d", i+1),
+			Balance:    int64(rand.Intn(10_000_000)), // up to 10M
+			Currency:   "IDR",
+			CreatedAt:  time.Now(),
+		})
+	}
+
+	return accounts
+}
+
+func insertCustomers(ctx context.Context, tx *sqlx.Tx, customers []Customer) error {
+	query := `
+	INSERT INTO customers (id, full_name, email, created_at)
+	VALUES (:id, :full_name, :email, :created_at)
+	`
+
+	_, err := tx.NamedExecContext(ctx, query, customers)
+	return err
+}
+
+func insertAccounts(ctx context.Context, tx *sqlx.Tx, accounts []Account) error {
+	query := `
+	INSERT INTO accounts (id, customer_id, account_number, balance, currency, created_at)
+	VALUES (:id, :customer_id, :account_number, :balance, :currency, :created_at)
+	`
+
+	_, err := tx.NamedExecContext(ctx, query, accounts)
+	return err
+}

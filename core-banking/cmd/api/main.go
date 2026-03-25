@@ -4,11 +4,11 @@ import (
 	"context"
 	"core-banking/internal/config"
 	"core-banking/internal/database"
+	"core-banking/internal/database/seeder"
 	"core-banking/internal/modules/account"
 	"core-banking/internal/modules/transaction"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -22,6 +22,13 @@ func main() {
 
 	// ---- Migrations ----
 	database.RunMigrateUp(cfg)
+
+	// ---- Seeder ----
+	s := seeder.New(db)
+	if err := s.Seed(context.Background()); err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Seeding completed")
 
 	// Transaction
 	txRepo := transaction.NewRepository(db)
@@ -63,7 +70,7 @@ func main() {
 		}
 	})
 
-	port := os.Getenv("PORT")
+	port := ":8080"
 	srv := &http.Server{
 		Addr:    port,
 		Handler: mux,
@@ -92,8 +99,6 @@ func main() {
 		log.Println("HTTP server stopped gracefully")
 	}
 
-	// ---- Optional: DB Cleanup ----
-	// ⚠ only for dev/test
 	database.RunMigrateDown(cfg)
 
 	log.Println("Application exited")
