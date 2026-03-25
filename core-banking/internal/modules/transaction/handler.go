@@ -32,6 +32,27 @@ func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, response.APIResponse{Data: "success"})
 }
 
+func (h *Handler) TransferWithLock(w http.ResponseWriter, r *http.Request) {
+	var req TransferRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: err.Error()})
+		return
+	}
+
+	err := h.service.TransferWithLock(r.Context(), req)
+	if err != nil {
+		response.JSON(w, http.StatusInternalServerError, response.APIResponse{Error: err.Error()})
+		return
+	}
+
+	response.JSON(w, http.StatusOK, response.APIResponse{
+		Success: true,
+		Data:    "success",
+		Message: "success",
+	})
+}
+
 func (h *Handler) handleList(w http.ResponseWriter, r *http.Request, accountID *string) {
 	q := r.URL.Query()
 

@@ -42,7 +42,8 @@ func main() {
 
 	// ---- HTTP Handler ----
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /transfer", txHandler.Transfer)
+	mux.HandleFunc("POST /v1/transfer", txHandler.Transfer)
+	mux.HandleFunc("POST /v2/transfer", txHandler.TransferWithLock)
 	mux.HandleFunc("GET /transactions", txHandler.ListAll)
 	mux.HandleFunc("GET /accounts/{id}/transactions", txHandler.ListByAccount)
 
