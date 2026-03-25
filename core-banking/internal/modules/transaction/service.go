@@ -4,15 +4,23 @@ import (
 	"context"
 	"core-banking/internal/database"
 	"core-banking/internal/pkg/pagination"
+	"core-banking/internal/service"
 	"fmt"
+	"log"
+	"math/rand"
+	"time"
 )
 
 type Service struct {
-	repo *Repository
+	repo        *Repository
+	lockManager *service.AccountLockManager
 }
 
 func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+	return &Service{
+		repo:        repo,
+		lockManager: service.NewAccountLockManager(),
+	}
 }
 
 func (s *Service) Transfer(ctx context.Context, req TransferRequest) error {
@@ -108,6 +116,163 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) error {
 		if err != nil {
 			return err
 		}
+
+		return tx.Commit()
+	})
+}
+
+func (s *Service) TransferWithLock(ctx context.Context, req TransferRequest) error {
+	lockKey := service.BuildOrderedKey(req.FromAccount, req.ToAccount)
+
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+
+	if err := s.lockManager.Lock(ctx, lockKey); err != nil {
+		return err
+	}
+	defer s.lockManager.Unlock(lockKey)
+
+	resultCh := make(chan error, 1)
+
+	go func() {
+		resultCh <- s.transferCriticalSection(ctx, req)
+	}()
+
+	select {
+	case err := <-resultCh:
+		return err
+	case <-ctx.Done():
+		return fmt.Errorf("transfer timeout (exceeded 4s)")
+	}
+}
+
+func (s *Service) transferCriticalSection(ctx context.Context, req TransferRequest) error {
+	return database.WithSerializableRetry(ctx, func() error {
+		// --- RANDOM DELAY (1–5 seconds) ---
+		delay := time.Duration(rand.Intn(5)+1) * time.Second
+		time.Sleep(delay)
+
+		tx, err := database.BeginSerializableTx(ctx, s.repo.DB)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		// --- Idempotency ---
+		var exists bool
+		if err := tx.Get(&exists,
+			`SELECT EXISTS(SELECT 1 FROM transactions WHERE reference_id=$1)`,
+			req.ReferenceID); err != nil {
+			return err
+		}
+		if exists {
+			return nil
+		}
+
+		// --- Lock accounts ---
+		var sender struct {
+			Balance   int64  `db:"available_balance"`
+			AccountNo string `db:"account_number"`
+			Customer  string `db:"customer_id"`
+		}
+
+		err = tx.Get(&sender,
+			`SELECT available_balance, account_number, customer_id
+			 FROM accounts WHERE id=$1 FOR UPDATE`,
+			req.FromAccount)
+		if err != nil {
+			return err
+		}
+
+		var receiver struct {
+			Balance   int64  `db:"available_balance"`
+			AccountNo string `db:"account_number"`
+		}
+
+		err = tx.Get(&receiver,
+			`SELECT available_balance, account_number
+			 FROM accounts WHERE id=$1 FOR UPDATE`,
+			req.ToAccount)
+		if err != nil {
+			return err
+		}
+
+		// --- Validation ---
+		if sender.Balance < req.Amount {
+			log.Println("transfer_failed",
+				"transaction_id", nil,
+				"source_account", sender.AccountNo,
+				"destination_account", receiver.AccountNo,
+				"amount", req.Amount,
+				"current_balance", sender.Balance,
+			)
+
+			return fmt.Errorf("insufficient balance")
+		}
+
+		// --- Insert transaction ---
+		var txID string
+		err = tx.Get(&txID, `
+			INSERT INTO transactions(reference_id, transaction_type, status, amount, currency, initiated_by)
+			VALUES ($1, 'transfer', 'pending', $2, $3, $4)
+			RETURNING id`,
+			req.ReferenceID, req.Amount, req.Currency, sender.Customer)
+		if err != nil {
+			return err
+		}
+
+		// --- Journal ---
+		var journalID string
+		err = tx.Get(&journalID, `
+			INSERT INTO journal_entries(transaction_id, journal_type)
+			VALUES ($1, 'transfer') RETURNING id`,
+			txID)
+		if err != nil {
+			return err
+		}
+
+		// --- Ledger ---
+		_, err = tx.Exec(`
+			INSERT INTO ledger_entries(journal_id, account_id, entry_type, amount, currency)
+			VALUES
+				($1, $2, 'debit', $3, $4),
+				($1, $5, 'credit', $3, $4)`,
+			journalID, req.FromAccount, req.Amount, req.Currency, req.ToAccount)
+		if err != nil {
+			return err
+		}
+
+		// --- Update balances ---
+		_, err = tx.Exec(`
+			UPDATE accounts SET available_balance = available_balance - $1 WHERE id=$2`,
+			req.Amount, req.FromAccount)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Exec(`
+			UPDATE accounts SET available_balance = available_balance + $1 WHERE id=$2`,
+			req.Amount, req.ToAccount)
+		if err != nil {
+			return err
+		}
+
+		// --- Complete ---
+		_, err = tx.Exec(`
+			UPDATE transactions
+			SET status='completed', completed_at=NOW()
+			WHERE id=$1`, txID)
+		if err != nil {
+			return err
+		}
+
+		// --- Success logging ---
+		log.Println("transfer_success",
+			"source_account", sender.AccountNo,
+			"source_balance_before", sender.Balance,
+			"destination_account", receiver.AccountNo,
+			"destination_balance_before", receiver.Balance,
+		)
 
 		return tx.Commit()
 	})
