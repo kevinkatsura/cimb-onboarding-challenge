@@ -180,25 +180,25 @@ CREATE TABLE IF NOT EXISTS fx_rates (
 );
 
 -- Ensure each transaction is balanced
-CREATE FUNCTION validate_transaction_balance(tx_id UUID) 
-RETURNS BOOLEAN AS $$
-DECLARE 
-    total_debit BIGINT;
-    total_credit BIGINT;
-BEGIN
-    SELECT COALESCE(SUM(amount), 0)
-    INTO total_debit
-    FROM ledger_entries
-    WHERE transaction_id = tx_id AND entry_type = 'debit';
+-- CREATE FUNCTION validate_transaction_balance(tx_id UUID) 
+-- RETURNS BOOLEAN AS $$
+-- DECLARE 
+--     total_debit BIGINT;
+--     total_credit BIGINT;
+-- BEGIN
+--     SELECT COALESCE(SUM(amount), 0)
+--     INTO total_debit
+--     FROM ledger_entries
+--     WHERE transaction_id = tx_id AND entry_type = 'debit';
 
-    SELECT COALESCE(SUM(amount), 0)
-    INTO total_credit
-    FROM ledger_entries
-    WHERE transaction_id = tx_id AND entry_type = 'credit';
+--     SELECT COALESCE(SUM(amount), 0)
+--     INTO total_credit
+--     FROM ledger_entries
+--     WHERE transaction_id = tx_id AND entry_type = 'credit';
 
-    RETURN total_debit = total_credit;
-END;
-$$ LANGUAGE plpgsql;
+--     RETURN total_debit = total_credit;
+-- END;
+-- $$ LANGUAGE plpgsql;
 
 -- Derived balance (Materialized View)
 CREATE MATERIALIZED VIEW account_balances AS
