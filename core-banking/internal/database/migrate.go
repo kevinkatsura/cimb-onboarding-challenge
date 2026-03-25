@@ -1,29 +1,18 @@
 package database
 
 import (
+	"core-banking/internal/config"
 	"errors"
 	"log"
 	"net/url"
 	"path/filepath"
 
-	"github.com/golang-migrate/migrate"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
-// func RunMigrations(db *sqlx.DB, path string) {
-// 	schema, err := os.ReadFile(path)
-// 	if err != nil {
-// 		log.Fatalf("Failed to read schema: %v", err)
-// 	}
-
-// 	_, err = db.Exec(string(schema))
-// 	if err != nil {
-// 		log.Fatalf("Migration failed: %v", err)
-// 	}
-
-// 	log.Println("Schema migrated successfully")
-// }
-
-func RunMigrateUp(dsn string) {
+func RunMigrateUp(cfg *config.DBConfig) {
 	// Resolve absolute path dynamically
 	absPath, err := filepath.Abs("migrations")
 	if err != nil {
@@ -38,7 +27,7 @@ func RunMigrateUp(dsn string) {
 
 	log.Println("Migration source:", sourceURL)
 
-	m, err := migrate.New(sourceURL, dsn)
+	m, err := migrate.New(sourceURL, buildMigrationDSN(cfg))
 	if err != nil {
 		log.Fatalf("migration init failed: %v", err)
 	}
@@ -51,7 +40,7 @@ func RunMigrateUp(dsn string) {
 
 	log.Println("Migrations UP applied")
 }
-func RunMigrateDown(dsn string) {
+func RunMigrateDown(cfg *config.DBConfig) {
 	// Resolve absolute path dynamically
 	absPath, err := filepath.Abs("migrations")
 	if err != nil {
@@ -66,7 +55,7 @@ func RunMigrateDown(dsn string) {
 
 	log.Println("Migration source:", sourceURL)
 
-	m, err := migrate.New(sourceURL, dsn)
+	m, err := migrate.New(sourceURL, buildMigrationDSN(cfg))
 	if err != nil {
 		log.Fatalf("migration init failed: %v", err)
 	}
@@ -78,4 +67,11 @@ func RunMigrateDown(dsn string) {
 	}
 
 	log.Println("Migrations UP applied")
+}
+
+func buildMigrationDSN(cfg *config.DBConfig) string {
+	return "postgres://" +
+		cfg.User + ":" + cfg.Password + "@" +
+		cfg.Host + ":" + cfg.Port + "/" +
+		cfg.Name + "?sslmode=" + cfg.SSLMode
 }

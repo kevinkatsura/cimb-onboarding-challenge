@@ -6,7 +6,6 @@ import (
 	"core-banking/internal/database"
 	"core-banking/internal/modules/account"
 	"core-banking/internal/modules/transaction"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -16,19 +15,13 @@ import (
 )
 
 func main() {
-	wd, _ := os.Getwd()
-	log.Println(wd)
 	cfg := config.LoadConfig()
-	dsn := fmt.Sprintf(
-		"host=%s port=%s user=%s password=%s dbname=postgres sslmode=%s",
-		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.SSLMode,
-	)
 	// ---- DB Bootstrap ----
 	database.EnsureDatabase(cfg)
 	db := database.NewPostgres(cfg)
 
 	// ---- Migrations ----
-	database.RunMigrateUp(dsn)
+	database.RunMigrateUp(cfg)
 
 	// Transaction
 	txRepo := transaction.NewRepository(db)
@@ -101,7 +94,7 @@ func main() {
 
 	// ---- Optional: DB Cleanup ----
 	// ⚠ only for dev/test
-	database.RunMigrateDown(dsn)
+	database.RunMigrateDown(cfg)
 
 	log.Println("Application exited")
 }
