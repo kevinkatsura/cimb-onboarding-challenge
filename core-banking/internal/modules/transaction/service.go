@@ -35,8 +35,11 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) error {
 		}
 
 		// 2. Lock accounts (ordered)
-		var fromBalance int64
-		err = tx.Get(&fromBalance, `SELECT available_balance FROM accounts WHERE id=$1 FOR UPDATE`, req.FromAccount)
+		var senderAccount struct {
+			FromBalance int64  `db:"available_balance"`
+			CustomerID  string `db:"customer_id"`
+		}
+		err = tx.Get(&senderAccount, `SELECT available_balance, customer_id FROM accounts WHERE id=$1 FOR UPDATE`, req.FromAccount)
 		if err != nil {
 			return err
 		}
@@ -47,7 +50,7 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) error {
 		}
 
 		// 3. Validate
-		if fromBalance < req.Amount {
+		if senderAccount.FromBalance < req.Amount {
 			return fmt.Errorf("Insufficient balance")
 		}
 
@@ -55,8 +58,8 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) error {
 		var txID string
 		err = tx.Get(&txID, `
 			INSERT INTO transactions(reference_id, transaction_type, status, amount, currency, initiated_by) 
-			VALUES ($1, 'transfer', 'pending', $2, $3) RETURNING id`,
-			req.ReferenceID, req.Amount, req.Currency)
+			VALUES ($1, 'transfer', 'pending', $2, $3, $4) RETURNING id;`,
+			req.ReferenceID, req.Amount, req.Currency, senderAccount.CustomerID)
 		if err != nil {
 			return err
 		}
@@ -65,7 +68,7 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) error {
 		var journalID string
 		err = tx.Get(&journalID, `
 			INSERT INTO journal_entries(transaction_id, journal_type)
-			VALUES ($1, 'transfer')`,
+			VALUES ($1, 'transfer') RETURNING id;`,
 			txID)
 		if err != nil {
 			return err
@@ -73,9 +76,9 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) error {
 
 		// 6. Ledger
 		_, err = tx.Exec(`
-			INSER INTO ledger_entries(journal_id, account_id, entry_type, amount, currency)
+			INSERT INTO ledger_entries(journal_id, account_id, entry_type, amount, currency)
 			VALUES 
-				($1, $2, 'debit', $3, $4)
+				($1, $2, 'debit', $3, $4),
 				($1, $5, 'credit', $3, $4)`,
 			journalID, req.FromAccount, req.Amount, req.Currency, req.ToAccount)
 		if err != nil {
