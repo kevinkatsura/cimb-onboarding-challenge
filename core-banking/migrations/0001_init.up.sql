@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS accounts (
 
     account_number VARCHAR(20) UNIQUE NOT NULL,
 
-    account_type VARCHAR(20) NOT NULL CHECK (account_type IN ('savings', 'current', 'loan', 'wallet'))
+    account_type VARCHAR(20) NOT NULL CHECK (account_type IN ('savings', 'current', 'loan', 'wallet')),
 
     currency CHAR(3) NOT NULL, -- ISOS currency
     status VARCHAR(20) NOT NULL CHECK (status IN ('active', 'frozen', 'closed')),
@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS payments (
     payment_method VARCHAR(30) NOT NULL, -- bank_transfer, card, ewallet
     provider VARCHAR(50), -- VISA, Gopay, etc
 
-    status VARCHAR(20) NOT NULL CHECK (status IN ('initiated', 'processing', 'settled', 'failed'))
+    status VARCHAR(20) NOT NULL CHECK (status IN ('initiated', 'processing', 'settled', 'failed')),
 
     fee_amount BIGINT DEFAULT 0,
     
@@ -188,13 +188,13 @@ DECLARE
 BEGIN
     SELECT COALESCE(SUM(amount), 0)
     INTO total_debit
-    FROM entries
-    WHERE transaction_id = tx_id AND direction = 'debit';
+    FROM ledger_entries
+    WHERE transaction_id = tx_id AND entry_type = 'debit';
 
     SELECT COALESCE(SUM(amount), 0)
     INTO total_credit
-    FROM entries
-    WHERE transaction_id = tx_id AND direction = 'credit';
+    FROM ledger_entries
+    WHERE transaction_id = tx_id AND entry_type = 'credit';
 
     RETURN total_debit = total_credit;
 END;
@@ -205,9 +205,9 @@ CREATE MATERIALIZED VIEW account_balances AS
 SELECT
     account_id,
     SUM(
-        CASE WHEN direction = 'credit' THEN amount
+        CASE WHEN entry_type = 'credit' THEN amount
         ELSE -amount
         END
     ) AS balance
-FROM entries
+FROM ledger_entries
 GROUP BY account_id;
