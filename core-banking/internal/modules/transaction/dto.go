@@ -13,15 +13,15 @@ type TransactionHistoryDTO struct {
 	TransactionType string `db:"transaction_type" json:"transaction_type"`
 	Status          string `db:"status" json:"status"`
 
-	JournalType string `db:"journal_type" json:"journal_type"`
+	JournalType *string `db:"journal_type" json:"journal_type"`
 
-	EntryType string `db:"entry_type" json:"entry_type"`
+	EntryType *string `db:"entry_type" json:"entry_type"`
 
 	Amount       int64  `db:"amount" json:"amount"`
 	Currency     string `db:"currency" json:"currency"`
-	BalanceAfter int64  `db:"balance_after" json:"balance_after"`
+	BalanceAfter *int64 `db:"balance_after" json:"balance_after"`
 
-	Description string `db:"description" json:"description"`
+	Description *string `db:"description" json:"description"`
 
 	CreatedAt   time.Time  `db:"created_at" json:"created_at"`
 	CompletedAt *time.Time `db:"completed_at" json:"completed_at"`

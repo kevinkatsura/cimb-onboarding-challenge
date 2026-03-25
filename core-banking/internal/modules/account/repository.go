@@ -65,7 +65,8 @@ func (r *Repository) GetByID(id string) (*Account, error) {
 				opened_at,
 				closed_at,
 				created_at,
-				updated_at
+				updated_at,
+				deleted_at
 		FROM accounts WHERE id=$1;`, id)
 	return &acc, err
 }
@@ -140,7 +141,8 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *p
 				opened_at,
 				closed_at,
 				created_at,
-				updated_at
+				updated_at,
+				deleted_at
 				` + base + `
 				` + order + `
 				LIMIT $` + fmt.Sprint(idx)
@@ -181,17 +183,28 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *p
 func (r *Repository) UpdateStatus(tx *sqlx.Tx, id string, status string) error {
 	_, err := tx.Exec(`
 		UPDATE accounts
-		SET	status=$1,
-			updated_at=NOW(),
-			closed_at=CASE WHEN $1='closed' THEN NOW() ELSE NULL END
-		WHERE id=$2;`, status, id)
+		SET status = $1::text,
+			updated_at = NOW(),
+			closed_at = CASE
+				WHEN $1::text = 'closed' AND closed_at IS NULL THEN NOW()
+				ELSE closed_at
+			END
+		WHERE id = $2;`, status, id)
 	return err
 }
 
 func (r *Repository) SoftDelete(tx *sqlx.Tx, id string) error {
-	_, err := tx.Exec(`
-		UPDATE accounts
-		SET deleted_at=NOW(), status='closed', updated_at=NOW()
-		WHERE id=$1 AND deleted_at IS NULL;`, id)
-	return err
+	var affectedID string
+	err := tx.QueryRowx(`
+		UPDATE accounts 
+		SET deleted_at = NOW(),
+			status = 'closed',
+			updated_at = NOW(),
+			closed_at = COALESCE(closed_at, NOW()) WHERE id = $1 AND deleted_at IS NULL RETURNING id;`, id).Scan(&affectedID)
+
+	if err != nil {
+		return err // includes sql.ErrNoRows
+	}
+
+	return nil
 }

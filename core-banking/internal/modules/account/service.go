@@ -136,7 +136,7 @@ func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 				created_at,
 				updated_at 
 			FROM accounts
-			WHERE id=$id FOR UPDATE`, id)
+			WHERE id=$1 FOR UPDATE`, id)
 		if err != nil {
 			return err
 		}

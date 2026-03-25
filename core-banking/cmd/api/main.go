@@ -46,31 +46,13 @@ func main() {
 	mux.HandleFunc("GET /transactions", txHandler.ListAll)
 	mux.HandleFunc("GET /accounts/{id}/transactions", txHandler.ListByAccount)
 
-	mux.HandleFunc("/accounts", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			accountHandler.List(w, r)
-		case http.MethodPost:
-			accountHandler.Create(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+	mux.HandleFunc("GET /accounts", accountHandler.List)
+	mux.HandleFunc("GET /accounts/{id}", accountHandler.Get)
+	mux.HandleFunc("POST /accounts", accountHandler.Create)
+	mux.HandleFunc("PATCH /accounts/{id}", accountHandler.UpdateStatus)
+	mux.HandleFunc("DELETE /accounts/{id}", accountHandler.Delete)
 
-	mux.HandleFunc("/accounts/", func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			accountHandler.Get(w, r)
-		case http.MethodPatch:
-			accountHandler.UpdateStatus(w, r)
-		case http.MethodDelete:
-			accountHandler.Delete(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
-
-	port := ":8085"
+	port := ":8095"
 	srv := &http.Server{
 		Addr:    port,
 		Handler: mux,
