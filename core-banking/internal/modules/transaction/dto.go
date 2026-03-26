@@ -26,3 +26,8 @@ type TransactionHistoryDTO struct {
 	CreatedAt   time.Time  `db:"created_at" json:"created_at"`
 	CompletedAt *time.Time `db:"completed_at" json:"completed_at"`
 }
+
+type transferResult struct {
+	response *TransferResponse
+	err      error
+}

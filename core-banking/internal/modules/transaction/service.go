@@ -121,33 +121,52 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) error {
 	})
 }
 
-func (s *Service) TransferWithLock(ctx context.Context, req TransferRequest) error {
+func (s *Service) TransferWithLock(ctx context.Context, req TransferRequest) (*TransferResponse, error) {
 	lockKey := service.BuildOrderedKey(req.FromAccount, req.ToAccount)
 
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
 
+	// --- Acquire Lock ---
 	if err := s.lockManager.Lock(ctx, lockKey); err != nil {
-		return err
+		return nil, err
 	}
 	defer s.lockManager.Unlock(lockKey)
 
-	resultCh := make(chan error, 1)
+	resultCh := make(chan transferResult, 1)
 
+	// --- Run critical section ---
 	go func() {
-		resultCh <- s.transferCriticalSection(ctx, req)
+		resp, err := s.transferCriticalSection(ctx, req)
+		resultCh <- transferResult{
+			response: resp,
+			err:      err,
+		}
 	}()
 
+	// --- Wait for result or timeout ---
 	select {
-	case err := <-resultCh:
-		return err
+	case result := <-resultCh:
+		return result.response, result.err
+
 	case <-ctx.Done():
-		return fmt.Errorf("transfer timeout (exceeded 4s)")
+		timeoutResp := &TransferResponse{
+			Status:             "failed",
+			TransactionID:      nil,
+			SourceAccount:      req.FromAccount,
+			DestinationAccount: req.ToAccount,
+			Amount:             req.Amount,
+			Message:            "transfer timeout (exceeded 4s)",
+		}
+
+		return timeoutResp, fmt.Errorf("timeout")
 	}
 }
 
-func (s *Service) transferCriticalSection(ctx context.Context, req TransferRequest) error {
-	return database.WithSerializableRetry(ctx, func() error {
+func (s *Service) transferCriticalSection(ctx context.Context, req TransferRequest) (*TransferResponse, error) {
+	var result *TransferResponse
+
+	err := database.WithSerializableRetry(ctx, func() error {
 		// --- RANDOM DELAY (1–5 seconds) ---
 		delay := time.Duration(rand.Intn(5)+1) * time.Second
 		time.Sleep(delay)
@@ -206,6 +225,17 @@ func (s *Service) transferCriticalSection(ctx context.Context, req TransferReque
 				"amount", req.Amount,
 				"current_balance", sender.Balance,
 			)
+
+			result = &TransferResponse{
+				Status:                  "failed",
+				TransactionID:           nil,
+				SourceAccount:           sender.AccountNo,
+				DestinationAccount:      receiver.AccountNo,
+				Amount:                  req.Amount,
+				SourceBalanceAfter:      &sender.Balance,
+				DestinationBalanceAfter: &receiver.Balance,
+				Message:                 "transfer failed",
+			}
 
 			return fmt.Errorf("insufficient balance")
 		}
@@ -266,16 +296,32 @@ func (s *Service) transferCriticalSection(ctx context.Context, req TransferReque
 			return err
 		}
 
+		sender.Balance -= req.Amount
+		receiver.Balance += req.Amount
+
 		// --- Success logging ---
+		result = &TransferResponse{
+			Status:                  "success",
+			TransactionID:           &txID,
+			SourceAccount:           sender.AccountNo,
+			DestinationAccount:      receiver.AccountNo,
+			Amount:                  req.Amount,
+			SourceBalanceAfter:      &sender.Balance,
+			DestinationBalanceAfter: &receiver.Balance,
+			Message:                 "transfer completed successfully",
+		}
+
 		log.Println("transfer_success",
-			"source_account", sender.AccountNo,
-			"source_balance_before", sender.Balance,
-			"destination_account", receiver.AccountNo,
-			"destination_balance_before", receiver.Balance,
+			"source_account", result.SourceAccount,
+			"source_balance_before", result.SourceBalanceAfter,
+			"destination_account", result.DestinationAccount,
+			"destination_balance_before", result.DestinationBalanceAfter,
 		)
 
 		return tx.Commit()
 	})
+
+	return result, err
 }
 
 func (s *Service) List(ctx context.Context, f ListFilter) ([]TransactionHistoryDTO, int, string, string, error) {

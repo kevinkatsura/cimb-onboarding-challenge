@@ -40,15 +40,18 @@ func (h *Handler) TransferWithLock(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.service.TransferWithLock(r.Context(), req)
+	data, err := h.service.TransferWithLock(r.Context(), req)
 	if err != nil {
-		response.JSON(w, http.StatusInternalServerError, response.APIResponse{Error: err.Error()})
+		response.JSON(w, http.StatusInternalServerError, response.APIResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
 		return
 	}
 
 	response.JSON(w, http.StatusOK, response.APIResponse{
 		Success: true,
-		Data:    "success",
+		Data:    data,
 		Message: "success",
 	})
 }
