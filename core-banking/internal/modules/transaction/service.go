@@ -122,8 +122,7 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) error {
 }
 
 func (s *Service) TransferWithLock(ctx context.Context, req TransferRequest) (*TransferResponse, error) {
-	lockKey := service.BuildOrderedKey(req.FromAccount, req.ToAccount)
-
+	lockKey := req.ToAccount
 	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
 
@@ -159,7 +158,7 @@ func (s *Service) TransferWithLock(ctx context.Context, req TransferRequest) (*T
 			Message:            "transfer timeout (exceeded 4s)",
 		}
 
-		return timeoutResp, fmt.Errorf("timeout")
+		return timeoutResp, fmt.Errorf("transfer timeout (exceeded 4s)")
 	}
 }
 
@@ -234,7 +233,7 @@ func (s *Service) transferCriticalSection(ctx context.Context, req TransferReque
 				Amount:                  req.Amount,
 				SourceBalanceAfter:      &sender.Balance,
 				DestinationBalanceAfter: &receiver.Balance,
-				Message:                 "transfer failed",
+				Message:                 "insufficient balance",
 			}
 
 			return fmt.Errorf("insufficient balance")
@@ -313,9 +312,9 @@ func (s *Service) transferCriticalSection(ctx context.Context, req TransferReque
 
 		log.Println("transfer_success",
 			"source_account", result.SourceAccount,
-			"source_balance_before", result.SourceBalanceAfter,
+			"source_balance_after", result.SourceBalanceAfter,
 			"destination_account", result.DestinationAccount,
-			"destination_balance_before", result.DestinationBalanceAfter,
+			"destination_balance_after", result.DestinationBalanceAfter,
 		)
 
 		return tx.Commit()
