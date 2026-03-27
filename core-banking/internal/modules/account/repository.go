@@ -208,3 +208,5 @@ func (r *Repository) SoftDelete(tx *sqlx.Tx, id string) error {
 
 	return nil
 }
+
+var _ RepositoryInterface = (*Repository)(nil)

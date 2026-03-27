@@ -19,6 +19,7 @@ func main() {
 	// ---- DB Bootstrap ----
 	database.EnsureDatabase(cfg)
 	db := database.NewPostgres(cfg)
+	txm := database.NewTxManager(db)
 
 	// ---- Migrations ----
 	database.RunMigrateUp(cfg)
@@ -32,12 +33,12 @@ func main() {
 
 	// Transaction
 	txRepo := transaction.NewRepository(db)
-	txService := transaction.NewService(txRepo)
+	txService := transaction.NewService(txRepo, txm)
 	txHandler := transaction.NewHandler(txService)
 
 	// Account
 	accountRepo := account.NewRepository(db)
-	accountService := account.NewService(accountRepo)
+	accountService := account.NewService(accountRepo, txm)
 	accountHandler := account.NewHandler(accountService)
 
 	// ---- HTTP Handler ----
@@ -53,7 +54,7 @@ func main() {
 	mux.HandleFunc("PATCH /accounts/{id}", accountHandler.UpdateStatus)
 	mux.HandleFunc("DELETE /accounts/{id}", accountHandler.Delete)
 
-	port := ":8117"
+	port := ":8118"
 	srv := &http.Server{
 		Addr:    port,
 		Handler: mux,

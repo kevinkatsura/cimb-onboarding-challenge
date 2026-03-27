@@ -10,11 +10,15 @@ import (
 )
 
 type Service struct {
-	repo *Repository
+	repo RepositoryInterface
+	txm  database.TxManager
 }
 
-func NewService(repo *Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo RepositoryInterface, txm database.TxManager) *Service {
+	return &Service{
+		repo: repo,
+		txm:  txm,
+	}
 }
 
 func generateAccountNumber() (string, error) {
@@ -28,8 +32,8 @@ func generateAccountNumber() (string, error) {
 func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (*Account, error) {
 	var acc Account
 
-	err := database.WithSerializableRetry(ctx, func() error {
-		tx, err := database.BeginSerializableTx(ctx, s.repo.DB)
+	err := s.txm.WithSerializableRetry(ctx, func() error {
+		tx, err := s.txm.BeginSerializableTx(ctx)
 		if err != nil {
 			return err
 		}
@@ -90,8 +94,8 @@ func (s *Service) ListAccounts(ctx context.Context, f ListFilter) ([]Account, in
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, id string, status string) error {
-	return database.WithSerializableRetry(ctx, func() error {
-		tx, err := database.BeginSerializableTx(ctx, s.repo.DB)
+	return s.txm.WithSerializableRetry(ctx, func() error {
+		tx, err := s.txm.BeginSerializableTx(ctx)
 		if err != nil {
 			return err
 		}
@@ -112,8 +116,8 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status string) er
 }
 
 func (s *Service) DeleteAccount(ctx context.Context, id string) error {
-	return database.WithSerializableRetry(ctx, func() error {
-		tx, err := database.BeginSerializableTx(ctx, s.repo.DB)
+	return s.txm.WithSerializableRetry(ctx, func() error {
+		tx, err := s.txm.BeginSerializableTx(ctx)
 		if err != nil {
 			return err
 		}

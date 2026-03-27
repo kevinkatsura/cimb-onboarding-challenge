@@ -14,18 +14,20 @@ import (
 type Service struct {
 	repo        *Repository
 	lockManager *service.AccountLockManager
+	txm         database.TxManager
 }
 
-func NewService(repo *Repository) *Service {
+func NewService(repo *Repository, txm database.TxManager) *Service {
 	return &Service{
 		repo:        repo,
 		lockManager: service.NewAccountLockManager(),
+		txm:         txm,
 	}
 }
 
 func (s *Service) Transfer(ctx context.Context, req TransferRequest) error {
-	return database.WithSerializableRetry(ctx, func() error {
-		tx, err := database.BeginSerializableTx(ctx, s.repo.DB)
+	return s.txm.WithSerializableRetry(ctx, func() error {
+		tx, err := s.txm.BeginSerializableTx(ctx)
 		if err != nil {
 			return err
 		}
@@ -165,12 +167,12 @@ func (s *Service) TransferWithLock(ctx context.Context, req TransferRequest) (*T
 func (s *Service) transferCriticalSection(ctx context.Context, req TransferRequest) (*TransferResponse, error) {
 	var result *TransferResponse
 
-	err := database.WithSerializableRetry(ctx, func() error {
+	err := s.txm.WithSerializableRetry(ctx, func() error {
 		// --- RANDOM DELAY (1–5 seconds) ---
 		delay := time.Duration(rand.Intn(5)+1) * time.Second
 		time.Sleep(delay)
 
-		tx, err := database.BeginSerializableTx(ctx, s.repo.DB)
+		tx, err := s.txm.BeginSerializableTx(ctx)
 		if err != nil {
 			return err
 		}
