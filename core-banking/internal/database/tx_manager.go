@@ -11,7 +11,7 @@ import (
 
 type TxManager interface {
 	WithSerializableRetry(ctx context.Context, fn func() error) error
-	BeginSerializableTx(ctx context.Context) (*sqlx.Tx, error)
+	BeginSerializableTx(ctx context.Context) (*sqlxTxWrapper, error)
 }
 
 type DefaultTxManager struct {
@@ -42,8 +42,12 @@ func (d *DefaultTxManager) WithSerializableRetry(ctx context.Context, fn func() 
 	return err
 }
 
-func (d *DefaultTxManager) BeginSerializableTx(ctx context.Context) (*sqlx.Tx, error) {
-	return d.DB.BeginTxx(ctx, &sql.TxOptions{
+func (d *DefaultTxManager) BeginSerializableTx(ctx context.Context) (Tx, error) {
+	tx, err := d.DB.BeginTxx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelSerializable,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return &sqlxTxWrapper{tx: tx}, nil
 }
