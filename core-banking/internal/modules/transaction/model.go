@@ -26,3 +26,24 @@ type TransferResponse struct {
 
 	Message string `json:"message"`
 }
+
+type SenderAccount struct {
+	Balance    int64  `db:"balance"`
+	CustomerID string `db:"customer_id"`
+	AccountNo  string `db:"account_number"`
+}
+
+type InsertTransactionParams struct {
+	ReferenceID string
+	Amount      int64
+	Currency    string
+	CustomerID  string
+}
+
+type InsertLedgerParams struct {
+	JournalID string
+	FromAcc   string
+	ToAcc     string
+	Amount    int64
+	Currency  string
+}

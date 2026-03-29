@@ -138,3 +138,121 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]TransactionHisto
 
 	return results, total, nextCursor, prevCursor, nil
 }
+
+func (r *Repository) IsTransactionExists(ctx context.Context, refID string) (bool, error) {
+	var exists bool
+
+	err := r.DB.GetContext(ctx, &exists,
+		`SELECT EXISTS(SELECT 1 FROM transactions WHERE reference_id=$1)`,
+		refID,
+	)
+
+	return exists, err
+}
+
+func (r *Repository) GetSenderForUpdate(ctx context.Context, accountID string) (SenderAccount, error) {
+	var result SenderAccount
+
+	err := r.DB.GetContext(ctx, &result,
+		`SELECT available_balance AS balance, customer_id, account_number
+		 FROM accounts
+		 WHERE id=$1
+		 FOR UPDATE`,
+		accountID,
+	)
+
+	return result, err
+}
+
+func (r *Repository) LockReceiver(ctx context.Context, accountID string) error {
+	_, err := r.DB.ExecContext(ctx,
+		`SELECT 1 FROM accounts WHERE id=$1 FOR UPDATE`,
+		accountID,
+	)
+
+	return err
+}
+
+func (r *Repository) InsertTransaction(ctx context.Context, p InsertTransactionParams) (string, error) {
+	var txID string
+
+	err := r.DB.GetContext(ctx, &txID,
+		`INSERT INTO transactions(reference_id, transaction_type, status, amount, currency, initiated_by)
+		 VALUES ($1, 'transfer', 'pending', $2, $3, $4)
+		 RETURNING id`,
+		p.ReferenceID,
+		p.Amount,
+		p.Currency,
+		p.CustomerID,
+	)
+
+	return txID, err
+}
+
+func (r *Repository) InsertJournal(ctx context.Context, txID string) (string, error) {
+	var journalID string
+
+	err := r.DB.GetContext(ctx, &journalID,
+		`INSERT INTO journal_entries(transaction_id, journal_type)
+		 VALUES ($1, 'transfer')
+		 RETURNING id`,
+		txID,
+	)
+
+	return journalID, err
+}
+
+func (r *Repository) InsertLedger(ctx context.Context, p InsertLedgerParams) error {
+	_, err := r.DB.ExecContext(ctx,
+		`INSERT INTO ledger_entries(journal_id, account_id, entry_type, amount, currency)
+		 VALUES
+		 	($1, $2, 'debit', $3, $4),
+		 	($1, $5, 'credit', $3, $4)`,
+		p.JournalID,
+		p.FromAcc,
+		p.Amount,
+		p.Currency,
+		p.ToAcc,
+	)
+
+	return err
+}
+
+func (r *Repository) DebitAccount(ctx context.Context, accountID string, amount int64) error {
+	_, err := r.DB.ExecContext(ctx,
+		`UPDATE accounts
+		 SET available_balance = available_balance - $1
+		 WHERE id=$2`,
+		amount,
+		accountID,
+	)
+
+	return err
+}
+
+func (r *Repository) CreditAccount(ctx context.Context, accountID string, amount int64) error {
+	_, err := r.DB.ExecContext(ctx,
+		`UPDATE accounts
+		 SET available_balance = available_balance + $1
+		 WHERE id=$2`,
+		amount,
+		accountID,
+	)
+
+	return err
+}
+
+func (r *Repository) CompleteTransaction(ctx context.Context, txID string) error {
+	_, err := r.DB.ExecContext(ctx,
+		`UPDATE transactions
+		 SET status='completed', completed_at=NOW()
+		 WHERE id=$1`,
+		txID,
+	)
+
+	return err
+}
+
+func itoa(i int) string {
+	return fmt.Sprintf("%d", i)
+}

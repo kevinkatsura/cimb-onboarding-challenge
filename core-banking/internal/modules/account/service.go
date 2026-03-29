@@ -2,17 +2,16 @@ package account
 
 import (
 	"context"
-	"core-banking/internal/domain/account"
 	"core-banking/internal/pkg/pagination"
 	"fmt"
 )
 
 type Service struct {
 	repo      RepositoryInterface
-	accNumGen account.AccountNumberGenerator
+	accNumGen AccountNumberGenerator
 }
 
-func NewService(repo RepositoryInterface, accNumGen account.AccountNumberGenerator) *Service {
+func NewService(repo RepositoryInterface, accNumGen AccountNumberGenerator) *Service {
 	return &Service{
 		repo:      repo,
 		accNumGen: accNumGen,

@@ -37,7 +37,7 @@ func main() {
 
 	// Account
 	accountRepo := account.NewRepository(db)
-	accountService := account.NewService(accountRepo)
+	accountService := account.NewService(accountRepo, &account.RandomAccountNumberGenerator{})
 	accountHandler := account.NewHandler(accountService)
 
 	// ---- HTTP Handler ----
