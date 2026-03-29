@@ -26,8 +26,7 @@ type TransactionRepositoryInterface interface {
 }
 
 type TransactionServiceInterface interface {
-	Transfer(ctx context.Context, req TransferRequest) error
+	Transfer(ctx context.Context, req TransferRequest) (*TransferResponse, error)
 	TransferWithLock(ctx context.Context, req TransferRequest) (*TransferResponse, error)
-	transferCriticalSection(ctx context.Context, req TransferRequest) (*TransferResponse, error)
 	List(ctx context.Context, f ListFilter) ([]TransactionHistoryDTO, int, string, string, error)
 }

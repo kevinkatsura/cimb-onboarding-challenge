@@ -7,6 +7,7 @@ import (
 	"core-banking/internal/database/seeder"
 	"core-banking/internal/modules/account"
 	"core-banking/internal/modules/transaction"
+	"core-banking/internal/service"
 	"log"
 	"net/http"
 	"os/signal"
@@ -30,9 +31,11 @@ func main() {
 	}
 	log.Println("Seeding completed")
 
+	lock := service.NewAccountLockManager()
+
 	// Transaction
 	txRepo := transaction.NewRepository(db)
-	txService := transaction.NewService(txRepo)
+	txService := transaction.NewService(txRepo, lock)
 	txHandler := transaction.NewHandler(txService)
 
 	// Account

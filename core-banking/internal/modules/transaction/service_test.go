@@ -5,14 +5,17 @@ import (
 	"core-banking/internal/modules/transaction"
 	"core-banking/internal/pkg/pagination"
 	"core-banking/mocks"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
 type MockerForService struct {
-	repo *mocks.TransactionRepositoryInterface
+	repo        *mocks.TransactionRepositoryInterface
+	lockManager *mocks.LockManager
 }
 
 func TestTransactionService_Transfer(t *testing.T) {
@@ -28,46 +31,11 @@ func TestTransactionService_Transfer(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			desc: "idempotent - already exists",
-			args: args{
-				ctx: context.Background(),
-				req: transaction.TransferRequest{ReferenceID: "ref-1"},
-			},
-			mockSetup: func(m *MockerForService) {
-				m.repo.On("IsTransactionExists", mock.Anything, "ref-1").
-					Return(true, nil).Once()
-			},
-			wantErr: false,
-		},
-		{
-			desc: "insufficient balance",
-			args: args{
-				ctx: context.Background(),
-				req: transaction.TransferRequest{
-					ReferenceID: "ref-2",
-					FromAccount: "A",
-					ToAccount:   "B",
-					Amount:      100,
-				},
-			},
-			mockSetup: func(m *MockerForService) {
-				m.repo.On("IsTransactionExists", mock.Anything, "ref-2").
-					Return(false, nil)
-
-				m.repo.On("GetSenderForUpdate", mock.Anything, "A").
-					Return(transaction.SenderAccount{Balance: 50}, nil)
-
-				m.repo.On("LockReceiver", mock.Anything, "B").
-					Return(nil)
-			},
-			wantErr: true,
-		},
-		{
 			desc: "success",
 			args: args{
 				ctx: context.Background(),
 				req: transaction.TransferRequest{
-					ReferenceID: "ref-3",
+					ReferenceID: "ref-1",
 					FromAccount: "A",
 					ToAccount:   "B",
 					Amount:      100,
@@ -75,14 +43,17 @@ func TestTransactionService_Transfer(t *testing.T) {
 				},
 			},
 			mockSetup: func(m *MockerForService) {
-				m.repo.On("IsTransactionExists", mock.Anything, "ref-3").
+				sender := transaction.SenderAccount{
+					AccountNo:  "A",
+					Balance:    200,
+					CustomerID: "cust-1",
+				}
+
+				m.repo.On("IsTransactionExists", mock.Anything, "ref-1").
 					Return(false, nil)
 
 				m.repo.On("GetSenderForUpdate", mock.Anything, "A").
-					Return(transaction.SenderAccount{
-						Balance:    200,
-						CustomerID: "cust-1",
-					}, nil)
+					Return(sender, nil)
 
 				m.repo.On("LockReceiver", mock.Anything, "B").
 					Return(nil)
@@ -91,7 +62,7 @@ func TestTransactionService_Transfer(t *testing.T) {
 					Return("tx-1", nil)
 
 				m.repo.On("InsertJournal", mock.Anything, "tx-1").
-					Return("j-1", nil)
+					Return("journal-1", nil)
 
 				m.repo.On("InsertLedger", mock.Anything, mock.Anything).
 					Return(nil)
@@ -107,22 +78,164 @@ func TestTransactionService_Transfer(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			desc: "idempotency error",
+			args: args{
+				ctx: context.Background(),
+				req: transaction.TransferRequest{ReferenceID: "ref-dup"},
+			},
+			mockSetup: func(m *MockerForService) {
+				m.repo.On("IsTransactionExists", mock.Anything, "ref-dup").
+					Return(true, nil)
+			},
+			wantErr: true,
+		},
+		{
+			desc: "sender fetch error",
+			args: args{
+				ctx: context.Background(),
+				req: transaction.TransferRequest{ReferenceID: "ref"},
+			},
+			mockSetup: func(m *MockerForService) {
+				m.repo.On("IsTransactionExists", mock.Anything, "ref").
+					Return(false, nil)
+
+				m.repo.On("GetSenderForUpdate", mock.Anything, mock.Anything).
+					Return(transaction.SenderAccount{}, errors.New("db error"))
+			},
+			wantErr: true,
+		},
+		{
+			desc: "receiver lock error",
+			args: args{
+				ctx: context.Background(),
+				req: transaction.TransferRequest{
+					ReferenceID: "ref",
+					FromAccount: "A",
+					ToAccount:   "B",
+				},
+			},
+			mockSetup: func(m *MockerForService) {
+				m.repo.On("IsTransactionExists", mock.Anything, "ref").
+					Return(false, nil)
+
+				m.repo.On("GetSenderForUpdate", mock.Anything, "A").
+					Return(transaction.SenderAccount{Balance: 200}, nil)
+
+				m.repo.On("LockReceiver", mock.Anything, "B").
+					Return(errors.New("lock error"))
+			},
+			wantErr: true,
+		},
+		{
+			desc: "insufficient balance",
+			args: args{
+				ctx: context.Background(),
+				req: transaction.TransferRequest{
+					ReferenceID: "ref",
+					FromAccount: "A",
+					ToAccount:   "B",
+					Amount:      500,
+				},
+			},
+			mockSetup: func(m *MockerForService) {
+				m.repo.On("IsTransactionExists", mock.Anything, "ref").
+					Return(false, nil)
+
+				m.repo.On("GetSenderForUpdate", mock.Anything, "A").
+					Return(transaction.SenderAccount{Balance: 100}, nil)
+
+				m.repo.On("LockReceiver", mock.Anything, "B").
+					Return(nil)
+			},
+			wantErr: true,
+		},
+		{
+			desc: "insert transaction error",
+			args: args{
+				ctx: context.Background(),
+				req: transaction.TransferRequest{
+					ReferenceID: "ref",
+					FromAccount: "A",
+					ToAccount:   "B",
+					Amount:      50,
+				},
+			},
+			mockSetup: func(m *MockerForService) {
+				m.repo.On("IsTransactionExists", mock.Anything, "ref").
+					Return(false, nil)
+
+				m.repo.On("GetSenderForUpdate", mock.Anything, "A").
+					Return(transaction.SenderAccount{Balance: 100}, nil)
+
+				m.repo.On("LockReceiver", mock.Anything, "B").
+					Return(nil)
+
+				m.repo.On("InsertTransaction", mock.Anything, mock.Anything).
+					Return("", errors.New("insert error"))
+			},
+			wantErr: true,
+		},
+		{
+			desc: "complete transaction error",
+			args: args{
+				ctx: context.Background(),
+				req: transaction.TransferRequest{
+					ReferenceID: "ref",
+					FromAccount: "A",
+					ToAccount:   "B",
+					Amount:      50,
+				},
+			},
+			mockSetup: func(m *MockerForService) {
+				m.repo.On("IsTransactionExists", mock.Anything, "ref").
+					Return(false, nil)
+
+				m.repo.On("GetSenderForUpdate", mock.Anything, "A").
+					Return(transaction.SenderAccount{Balance: 100}, nil)
+
+				m.repo.On("LockReceiver", mock.Anything, "B").
+					Return(nil)
+
+				m.repo.On("InsertTransaction", mock.Anything, mock.Anything).
+					Return("tx-1", nil)
+
+				m.repo.On("InsertJournal", mock.Anything, "tx-1").
+					Return("j-1", nil)
+
+				m.repo.On("InsertLedger", mock.Anything, mock.Anything).
+					Return(nil)
+
+				m.repo.On("DebitAccount", mock.Anything, "A", int64(50)).
+					Return(nil)
+
+				m.repo.On("CreditAccount", mock.Anything, "B", int64(50)).
+					Return(nil)
+
+				m.repo.On("CompleteTransaction", mock.Anything, "tx-1").
+					Return(errors.New("commit error"))
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			m := &MockerForService{
-				repo: mocks.NewTransactionRepositoryInterface(t),
+				repo:        &mocks.TransactionRepositoryInterface{},
+				lockManager: &mocks.LockManager{},
 			}
 
 			tt.mockSetup(m)
 
-			svc := transaction.NewService(m.repo)
+			svc := transaction.NewService(m.repo, m.lockManager)
 
-			err := svc.Transfer(tt.args.ctx, tt.args.req)
+			_, err := svc.Transfer(tt.args.ctx, tt.args.req)
 
-			if (err != nil) != tt.wantErr {
-				t.Errorf("err = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 
 			m.repo.AssertExpectations(t)
@@ -130,49 +243,130 @@ func TestTransactionService_Transfer(t *testing.T) {
 	}
 }
 
-// func TestTransactionService_TransferWithLock(t *testing.T) {
-// 	type args struct {
-// 		ctx context.Context
-// 		req transaction.TransferRequest
-// 	}
+func TestService_TransferWithLock(t *testing.T) {
+	type args struct {
+		ctx context.Context
+		req transaction.TransferRequest
+	}
 
-// 	tests := []struct {
-// 		desc      string
-// 		args      args
-// 		mockSetup func(m *MockerForService)
-// 		wantErr   bool
-// 	}{
-// 		{
-// 			desc: "timeout",
-// 			args: args{
-// 				ctx: context.Background(),
-// 				req: transaction.TransferRequest{
-// 					ToAccount: "B",
-// 				},
-// 			},
-// 			mockSetup: func(m *MockerForService) {},
-// 			wantErr:   true,
-// 		},
-// 	}
+	tests := []struct {
+		desc      string
+		args      args
+		mockSetup func(m *MockerForService)
+		wantErr   bool
+	}{
+		{
+			desc: "success",
+			args: args{
+				ctx: context.Background(),
+				req: transaction.TransferRequest{
+					ReferenceID: "ref",
+					FromAccount: "A",
+					ToAccount:   "B",
+					Amount:      10,
+				},
+			},
+			mockSetup: func(m *MockerForService) {
+				m.lockManager.On("Lock", mock.Anything, "B").
+					Return(nil)
 
-// 	for _, tt := range tests {
-// 		t.Run(tt.desc, func(t *testing.T) {
-// 			m := &MockerForService{
-// 				repo: mocks.NewTransactionRepositoryInterface(t),
-// 			}
+				m.lockManager.On("Unlock", "B").
+					Return()
 
-// 			tt.mockSetup(m)
+				// reuse Transfer success mocks
+				m.repo.On("IsTransactionExists", mock.Anything, "ref").
+					Return(false, nil)
 
-// 			svc := transaction.NewService(m.repo)
+				m.repo.On("GetSenderForUpdate", mock.Anything, "A").
+					Return(transaction.SenderAccount{Balance: 100}, nil)
 
-// 			_, err := svc.TransferWithLock(tt.args.ctx, tt.args.req)
+				m.repo.On("LockReceiver", mock.Anything, "B").
+					Return(nil)
 
-// 			if (err != nil) != tt.wantErr {
-// 				t.Errorf("err mismatch")
-// 			}
-// 		})
-// 	}
-// }
+				m.repo.On("InsertTransaction", mock.Anything, mock.Anything).
+					Return("tx", nil)
+
+				m.repo.On("InsertJournal", mock.Anything, "tx").
+					Return("j", nil)
+
+				m.repo.On("InsertLedger", mock.Anything, mock.Anything).
+					Return(nil)
+
+				m.repo.On("DebitAccount", mock.Anything, "A", int64(10)).
+					Return(nil)
+
+				m.repo.On("CreditAccount", mock.Anything, "B", int64(10)).
+					Return(nil)
+
+				m.repo.On("CompleteTransaction", mock.Anything, "tx").
+					Return(nil)
+			},
+			wantErr: false,
+		},
+		{
+			desc: "lock failure",
+			args: args{
+				ctx: context.Background(),
+				req: transaction.TransferRequest{ToAccount: "B"},
+			},
+			mockSetup: func(m *MockerForService) {
+				m.lockManager.On("Lock", mock.Anything, "B").
+					Return(errors.New("lock failed"))
+			},
+			wantErr: true,
+		},
+		{
+			desc: "timeout",
+			args: args{
+				ctx: context.Background(),
+				req: transaction.TransferRequest{
+					ReferenceID: "ref",
+					FromAccount: "A",
+					ToAccount:   "B",
+				},
+			},
+			mockSetup: func(m *MockerForService) {
+				m.lockManager.On("Lock", mock.Anything, "B").
+					Return(nil)
+
+				m.lockManager.On("Unlock", "B").
+					Return()
+
+				// simulate slow Transfer
+				m.repo.On("IsTransactionExists", mock.Anything, "ref").
+					Run(func(args mock.Arguments) {
+						time.Sleep(5 * time.Second)
+					}).
+					Return(false, nil)
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			m := &MockerForService{
+				repo:        &mocks.TransactionRepositoryInterface{},
+				lockManager: &mocks.LockManager{},
+			}
+
+			tt.mockSetup(m)
+
+			svc := transaction.NewService(m.repo, m.lockManager)
+
+			_, err := svc.TransferWithLock(tt.args.ctx, tt.args.req)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			m.repo.AssertExpectations(t)
+			m.lockManager.AssertExpectations(t)
+		})
+	}
+}
 
 func TestTransactionService_List(t *testing.T) {
 	testCases := []struct {
@@ -209,12 +403,13 @@ func TestTransactionService_List(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
 			m := &MockerForService{
-				repo: &mocks.TransactionRepositoryInterface{},
+				repo:        &mocks.TransactionRepositoryInterface{},
+				lockManager: &mocks.LockManager{},
 			}
 
 			tC.mockSetup(m)
 
-			svc := transaction.NewService(m.repo)
+			svc := transaction.NewService(m.repo, m.lockManager)
 
 			_, _, _, _, err := svc.List(context.Background(), tC.filter)
 

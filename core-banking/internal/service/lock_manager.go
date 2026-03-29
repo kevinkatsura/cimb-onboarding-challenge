@@ -6,6 +6,11 @@ import (
 	"sync"
 )
 
+type LockManager interface {
+	Lock(ctx context.Context, key string) error
+	Unlock(key string)
+}
+
 type AccountLockManager struct {
 	locks sync.Map
 }

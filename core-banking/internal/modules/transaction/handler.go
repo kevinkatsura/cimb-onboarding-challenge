@@ -23,13 +23,20 @@ func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.service.Transfer(r.Context(), req)
+	data, err := h.service.Transfer(r.Context(), req)
 	if err != nil {
-		response.JSON(w, http.StatusInternalServerError, response.APIResponse{Error: err.Error()})
+		response.JSON(w, http.StatusInternalServerError, response.APIResponse{
+			Success: false,
+			Error:   err.Error(),
+		})
 		return
 	}
 
-	response.JSON(w, http.StatusOK, response.APIResponse{Data: "success"})
+	response.JSON(w, http.StatusOK, response.APIResponse{
+		Data:    data,
+		Success: true,
+		Message: "success",
+	})
 }
 
 func (h *Handler) TransferWithLock(w http.ResponseWriter, r *http.Request) {
