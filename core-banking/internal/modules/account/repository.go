@@ -27,7 +27,7 @@ type ListFilter struct {
 	Direction string // "next" or "prev"
 }
 
-func (r *Repository) Create(tx *sqlx.Tx, acc *Account) error {
+func (r *Repository) Create(acc *Account) error {
 	query := `
 	INSERT INTO accounts(
 		id, 
@@ -40,7 +40,7 @@ func (r *Repository) Create(tx *sqlx.Tx, acc *Account) error {
 	VALUES(gen_random_uuid(), $1, $2, $3, $4, 'active', $5)
 	RETURNING id, created_at, updated_at, opened_at;`
 
-	return tx.QueryRowx(
+	return r.DB.QueryRowx(
 		query,
 		acc.CustomerID,
 		acc.AccountNumber,
@@ -67,7 +67,7 @@ func (r *Repository) GetByID(id string) (*Account, error) {
 				created_at,
 				updated_at,
 				deleted_at
-		FROM accounts WHERE id=$1;`, id)
+		FROM accounts WHERE id=$1 FOR UPDATE;`, id)
 	return &acc, err
 }
 
@@ -180,8 +180,8 @@ func (r *Repository) List(ctx context.Context, f ListFilter) ([]Account, int, *p
 	return accounts, total, nextCursor, prevCursor, nil
 }
 
-func (r *Repository) UpdateStatus(tx *sqlx.Tx, id string, status string) error {
-	_, err := tx.Exec(`
+func (r *Repository) UpdateStatus(id string, status string) error {
+	_, err := r.DB.Exec(`
 		UPDATE accounts
 		SET status = $1::text,
 			updated_at = NOW(),
@@ -193,9 +193,9 @@ func (r *Repository) UpdateStatus(tx *sqlx.Tx, id string, status string) error {
 	return err
 }
 
-func (r *Repository) SoftDelete(tx *sqlx.Tx, id string) error {
+func (r *Repository) SoftDelete(id string) error {
 	var affectedID string
-	err := tx.QueryRowx(`
+	err := r.DB.QueryRowx(`
 		UPDATE accounts 
 		SET deleted_at = NOW(),
 			status = 'closed',
@@ -208,5 +208,3 @@ func (r *Repository) SoftDelete(tx *sqlx.Tx, id string) error {
 
 	return nil
 }
-
-var _ RepositoryInterface = (*Repository)(nil)

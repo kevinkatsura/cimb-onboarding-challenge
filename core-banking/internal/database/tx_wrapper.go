@@ -34,6 +34,6 @@ func (s *sqlxTxWrapper) Rollback() error {
 	return s.tx.Rollback()
 }
 
-// func (tx *sqlxTxWrapper) QueryRowx(query string, args ...interface{}) *sqlx.Row {
-// 	return s.tx.QueryRowx(query, args...)
-// }
+func (s *sqlxTxWrapper) QueryRowx(query string, args ...interface{}) *sqlx.Row {
+	return s.tx.QueryRowx(query, args...)
+}

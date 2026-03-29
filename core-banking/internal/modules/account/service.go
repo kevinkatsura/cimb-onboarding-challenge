@@ -2,7 +2,6 @@ package account
 
 import (
 	"context"
-	"core-banking/internal/database"
 	"core-banking/internal/pkg/pagination"
 	"crypto/rand"
 	"fmt"
@@ -11,13 +10,11 @@ import (
 
 type Service struct {
 	repo RepositoryInterface
-	txm  database.TxManager
 }
 
-func NewService(repo RepositoryInterface, txm database.TxManager) *Service {
+func NewService(repo RepositoryInterface) *Service {
 	return &Service{
 		repo: repo,
-		txm:  txm,
 	}
 }
 
@@ -32,35 +29,25 @@ func generateAccountNumber() (string, error) {
 func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (*Account, error) {
 	var acc Account
 
-	err := s.txm.WithSerializableRetry(ctx, func() error {
-		tx, err := s.txm.BeginSerializableTx(ctx)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
+	// 1. Get account number
+	accNumber, err := generateAccountNumber()
+	if err != nil {
+		return nil, err
+	}
 
-		// 1. Get account number
-		accNumber, err := generateAccountNumber()
-		if err != nil {
-			return err
-		}
+	acc = Account{
+		CustomerID:     req.CustomerID,
+		AccountNumber:  accNumber,
+		AccountType:    req.AccountType,
+		Currency:       req.Currency,
+		OverdraftLimit: req.OverdraftLimit,
+	}
 
-		acc = Account{
-			CustomerID:     req.CustomerID,
-			AccountNumber:  accNumber,
-			AccountType:    req.AccountType,
-			Currency:       req.Currency,
-			OverdraftLimit: req.OverdraftLimit,
-		}
-
-		// 2. Create account
-		err = s.repo.Create(tx, &acc)
-		if err != nil {
-			return err
-		}
-
-		return tx.Commit()
-	})
+	// 2. Create account
+	err = s.repo.Create(&acc)
+	if err != nil {
+		return nil, err
+	}
 
 	return &acc, err
 }
@@ -94,72 +81,30 @@ func (s *Service) ListAccounts(ctx context.Context, f ListFilter) ([]Account, in
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, id string, status string) error {
-	return s.txm.WithSerializableRetry(ctx, func() error {
-		tx, err := s.txm.BeginSerializableTx(ctx)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
+	// business rule
+	if status != "active" && status != "frozen" && status != "closed" {
+		return fmt.Errorf("invalid status")
+	}
 
-		// business rule
-		if status != "active" && status != "frozen" && status != "closed" {
-			return fmt.Errorf("invalid status")
-		}
-
-		err = s.repo.UpdateStatus(tx, id, status)
-		if err != nil {
-			return err
-		}
-
-		return tx.Commit()
-	})
+	return s.repo.UpdateStatus(id, status)
 }
 
 func (s *Service) DeleteAccount(ctx context.Context, id string) error {
-	return s.txm.WithSerializableRetry(ctx, func() error {
-		tx, err := s.txm.BeginSerializableTx(ctx)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
+	// 1. Lock account
+	acc, err := s.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
 
-		// 1. Lock account
-		var acc Account
-		err = tx.Get(&acc, `
-			SELECT id,
-				customer_id,
-				account_number,
-				account_type,
-				currency,
-				status,
-				available_balance,
-				pending_balance,
-				overdraft_limit,
-				opened_at,
-				closed_at,
-				created_at,
-				updated_at 
-			FROM accounts
-			WHERE id=$1 FOR UPDATE`, id)
-		if err != nil {
-			return err
-		}
+	// 2. Business rules (CRITICAL)
+	if acc.AvailableBalance != 0 {
+		return fmt.Errorf("cannot delete account with non-zero balance")
+	}
 
-		// 2. Business rules (CRITICAL)
-		if acc.AvailableBalance != 0 {
-			return fmt.Errorf("cannot delete account with non-zero balance")
-		}
+	if acc.Status != "closed" {
+		return fmt.Errorf("account must be closed before deletion")
+	}
 
-		if acc.Status != "closed" {
-			return fmt.Errorf("account must be closed before deletion")
-		}
-
-		// 3. Soft delete
-		err = s.repo.SoftDelete(tx, id)
-		if err != nil {
-			return err
-		}
-
-		return tx.Commit()
-	})
+	// 3. Soft delete
+	return s.repo.SoftDelete(id)
 }
