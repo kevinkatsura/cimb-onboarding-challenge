@@ -12,23 +12,23 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestAccountService_GetAccount(t *testing.T) {
-	type Mocker struct {
-		repo      *mocks.RepositoryInterface
-		accNumGen *mocks.AccountNumberGenerator
-	}
+type MockerForService struct {
+	repo      *mocks.RepositoryInterface
+	accNumGen *mocks.AccountNumberGenerator
+}
 
+func TestAccountService_GetAccount(t *testing.T) {
 	testCases := []struct {
 		desc      string
 		inputID   string
-		mockSetup func(m *Mocker)
+		mockSetup func(m *MockerForService)
 		wantErr   bool
 		expected  *account.Account
 	}{
 		{
 			desc:    "SUCCESS: get account",
 			inputID: "acc-1",
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.repo.On("GetByID", "acc-1").
 					Return(&account.Account{ID: "acc-1"}, nil)
 			},
@@ -37,7 +37,7 @@ func TestAccountService_GetAccount(t *testing.T) {
 		{
 			desc:    "ERROR: repository failure",
 			inputID: "acc-1",
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.repo.On("GetByID", "acc-1").
 					Return(nil, assert.AnError)
 			},
@@ -47,7 +47,7 @@ func TestAccountService_GetAccount(t *testing.T) {
 
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			m := &Mocker{
+			m := &MockerForService{
 				repo: mocks.NewRepositoryInterface(t),
 			}
 
@@ -70,15 +70,10 @@ func TestAccountService_GetAccount(t *testing.T) {
 }
 
 func TestAccountService_ListAccounts(t *testing.T) {
-	type Mocker struct {
-		repo      *mocks.RepositoryInterface
-		accNumGen *mocks.AccountNumberGenerator
-	}
-
 	testCases := []struct {
 		desc      string
 		filter    account.ListFilter
-		mockSetup func(m *Mocker)
+		mockSetup func(m *MockerForService)
 		wantErr   bool
 	}{
 		{
@@ -86,7 +81,7 @@ func TestAccountService_ListAccounts(t *testing.T) {
 			filter: account.ListFilter{
 				Limit: -1,
 			},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.repo.On("List", mock.Anything, mock.Anything).
 					Return([]account.Account{}, 0,
 						&pagination.Cursor{ID: "next"},
@@ -98,7 +93,7 @@ func TestAccountService_ListAccounts(t *testing.T) {
 			filter: account.ListFilter{
 				Limit: 10,
 			},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.repo.On("List", mock.Anything, mock.Anything).
 					Return(nil, 0, nil, nil, assert.AnError)
 			},
@@ -108,7 +103,7 @@ func TestAccountService_ListAccounts(t *testing.T) {
 
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
-			m := &Mocker{
+			m := &MockerForService{
 				repo:      &mocks.RepositoryInterface{},
 				accNumGen: &mocks.AccountNumberGenerator{},
 			}
@@ -135,15 +130,10 @@ func TestAccountService_CreateAccount(t *testing.T) {
 		req account.CreateAccountRequest
 	}
 
-	type Mocker struct {
-		repo      *mocks.RepositoryInterface
-		accNumGen *mocks.AccountNumberGenerator
-	}
-
 	tests := []struct {
 		desc      string
 		args      args
-		mockSetup func(m *Mocker)
+		mockSetup func(m *MockerForService)
 		wantErr   bool
 	}{
 		{
@@ -155,7 +145,7 @@ func TestAccountService_CreateAccount(t *testing.T) {
 					Currency:    "IDR",
 				},
 			},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.accNumGen.On("Generate").
 					Return("100000000001", nil)
 
@@ -171,7 +161,7 @@ func TestAccountService_CreateAccount(t *testing.T) {
 			args: args{
 				req: account.CreateAccountRequest{},
 			},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.accNumGen.On("Generate").
 					Return("", errors.New("gen error"))
 			},
@@ -182,7 +172,7 @@ func TestAccountService_CreateAccount(t *testing.T) {
 			args: args{
 				req: account.CreateAccountRequest{},
 			},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.accNumGen.On("Generate").
 					Return("100000000001", nil)
 
@@ -195,7 +185,7 @@ func TestAccountService_CreateAccount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			m := &Mocker{
+			m := &MockerForService{
 				repo:      &mocks.RepositoryInterface{},
 				accNumGen: &mocks.AccountNumberGenerator{},
 			}
@@ -219,11 +209,6 @@ func TestAccountService_CreateAccount(t *testing.T) {
 }
 
 func TestAccountService_UpdateStatus(t *testing.T) {
-	type Mocker struct {
-		repo      *mocks.RepositoryInterface
-		accNumGen *mocks.AccountNumberGenerator
-	}
-
 	type args struct {
 		id     string
 		status string
@@ -232,7 +217,7 @@ func TestAccountService_UpdateStatus(t *testing.T) {
 	tests := []struct {
 		desc      string
 		args      args
-		mockSetup func(m *Mocker)
+		mockSetup func(m *MockerForService)
 		wantErr   bool
 	}{
 		{
@@ -243,7 +228,7 @@ func TestAccountService_UpdateStatus(t *testing.T) {
 		{
 			desc: "success",
 			args: args{"1", "active"},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.repo.On("UpdateStatus", "1", "active").
 					Return(nil)
 			},
@@ -252,7 +237,7 @@ func TestAccountService_UpdateStatus(t *testing.T) {
 		{
 			desc: "repo error",
 			args: args{"1", "closed"},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.repo.On("UpdateStatus", "1", "closed").
 					Return(errors.New("db error"))
 			},
@@ -262,7 +247,7 @@ func TestAccountService_UpdateStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			m := &Mocker{
+			m := &MockerForService{
 				repo:      &mocks.RepositoryInterface{},
 				accNumGen: &mocks.AccountNumberGenerator{},
 			}
@@ -285,11 +270,6 @@ func TestAccountService_UpdateStatus(t *testing.T) {
 }
 
 func TestAccountService_DeleteAccount(t *testing.T) {
-	type Mocker struct {
-		repo      *mocks.RepositoryInterface
-		accNumGen *mocks.AccountNumberGenerator
-	}
-
 	type args struct {
 		id string
 	}
@@ -297,13 +277,13 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 	tests := []struct {
 		desc      string
 		args      args
-		mockSetup func(m *Mocker)
+		mockSetup func(m *MockerForService)
 		wantErr   bool
 	}{
 		{
 			desc: "get error",
 			args: args{"1"},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.repo.On("GetByID", "1").
 					Return(&account.Account{}, errors.New("not found"))
 			},
@@ -312,7 +292,7 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 		{
 			desc: "non-zero balance",
 			args: args{"1"},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.repo.On("GetByID", "1").
 					Return(&account.Account{AvailableBalance: 10, Status: "closed"}, nil)
 			},
@@ -321,7 +301,7 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 		{
 			desc: "not closed",
 			args: args{"1"},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.repo.On("GetByID", "1").
 					Return(&account.Account{AvailableBalance: 0, Status: "active"}, nil)
 			},
@@ -330,7 +310,7 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 		{
 			desc: "success",
 			args: args{"1"},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.repo.On("GetByID", "1").
 					Return(&account.Account{AvailableBalance: 0, Status: "closed"}, nil)
 
@@ -342,7 +322,7 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 		{
 			desc: "delete error",
 			args: args{"1"},
-			mockSetup: func(m *Mocker) {
+			mockSetup: func(m *MockerForService) {
 				m.repo.On("GetByID", "1").
 					Return(&account.Account{AvailableBalance: 0, Status: "closed"}, nil)
 
@@ -355,7 +335,7 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			m := &Mocker{
+			m := &MockerForService{
 				repo:      &mocks.RepositoryInterface{},
 				accNumGen: &mocks.AccountNumberGenerator{},
 			}

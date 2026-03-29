@@ -14,7 +14,6 @@ type RepositoryInterface interface {
 }
 
 type ServiceInterface interface {
-	generateAccountNumber() (string, error)
 	CreateAccount(ctx context.Context, req CreateAccountRequest) (*Account, error)
 	GetAccount(ctx context.Context, id string) (*Account, error)
 	ListAccounts(ctx context.Context, f ListFilter) ([]Account, int, string, string, error)
