@@ -2,35 +2,28 @@ package account
 
 import (
 	"context"
+	"core-banking/internal/domain/account"
 	"core-banking/internal/pkg/pagination"
-	"crypto/rand"
 	"fmt"
-	"math/big"
 )
 
 type Service struct {
-	repo RepositoryInterface
+	repo      RepositoryInterface
+	accNumGen account.AccountNumberGenerator
 }
 
-func NewService(repo RepositoryInterface) *Service {
+func NewService(repo RepositoryInterface, accNumGen account.AccountNumberGenerator) *Service {
 	return &Service{
-		repo: repo,
+		repo:      repo,
+		accNumGen: accNumGen,
 	}
-}
-
-func generateAccountNumber() (string, error) {
-	n, err := rand.Int(rand.Reader, big.NewInt(1e12))
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("10%010d", n.Int64()), nil
 }
 
 func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (*Account, error) {
 	var acc Account
 
 	// 1. Get account number
-	accNumber, err := generateAccountNumber()
+	accNumber, err := s.accNumGen.Generate()
 	if err != nil {
 		return nil, err
 	}
