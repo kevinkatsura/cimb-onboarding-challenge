@@ -13,7 +13,7 @@ import (
 )
 
 type MockerForService struct {
-	repo      *mocks.RepositoryInterface
+	repo      *mocks.AccountRepositoryInterface
 	accNumGen *mocks.AccountNumberGenerator
 }
 
@@ -48,7 +48,7 @@ func TestAccountService_GetAccount(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
 			m := &MockerForService{
-				repo: mocks.NewRepositoryInterface(t),
+				repo: mocks.NewAccountRepositoryInterface(t),
 			}
 
 			tC.mockSetup(m)
@@ -104,7 +104,7 @@ func TestAccountService_ListAccounts(t *testing.T) {
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
 			m := &MockerForService{
-				repo:      &mocks.RepositoryInterface{},
+				repo:      &mocks.AccountRepositoryInterface{},
 				accNumGen: &mocks.AccountNumberGenerator{},
 			}
 
@@ -186,7 +186,7 @@ func TestAccountService_CreateAccount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			m := &MockerForService{
-				repo:      &mocks.RepositoryInterface{},
+				repo:      &mocks.AccountRepositoryInterface{},
 				accNumGen: &mocks.AccountNumberGenerator{},
 			}
 
@@ -248,7 +248,7 @@ func TestAccountService_UpdateStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			m := &MockerForService{
-				repo:      &mocks.RepositoryInterface{},
+				repo:      &mocks.AccountRepositoryInterface{},
 				accNumGen: &mocks.AccountNumberGenerator{},
 			}
 
@@ -336,7 +336,7 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			m := &MockerForService{
-				repo:      &mocks.RepositoryInterface{},
+				repo:      &mocks.AccountRepositoryInterface{},
 				accNumGen: &mocks.AccountNumberGenerator{},
 			}
 

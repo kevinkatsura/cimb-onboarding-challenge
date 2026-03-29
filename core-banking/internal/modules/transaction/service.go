@@ -13,12 +13,12 @@ import (
 type DelayFunc func()
 
 type Service struct {
-	repo        RepositoryInterface
+	repo        TransactionRepositoryInterface
 	lockManager *service.AccountLockManager
 	delay       DelayFunc
 }
 
-func NewService(repo RepositoryInterface) *Service {
+func NewService(repo TransactionRepositoryInterface) *Service {
 	return &Service{
 		repo:        repo,
 		lockManager: service.NewAccountLockManager(),

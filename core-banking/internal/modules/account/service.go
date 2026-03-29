@@ -7,11 +7,11 @@ import (
 )
 
 type Service struct {
-	repo      RepositoryInterface
+	repo      AccountRepositoryInterface
 	accNumGen AccountNumberGenerator
 }
 
-func NewService(repo RepositoryInterface, accNumGen AccountNumberGenerator) *Service {
+func NewService(repo AccountRepositoryInterface, accNumGen AccountNumberGenerator) *Service {
 	return &Service{
 		repo:      repo,
 		accNumGen: accNumGen,

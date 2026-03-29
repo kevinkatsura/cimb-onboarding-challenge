@@ -14,7 +14,7 @@ import (
 )
 
 type MockerForHandler struct {
-	service *mocks.ServiceInterface
+	service *mocks.AccountServiceInterface
 }
 
 func TestHandler_Create(t *testing.T) {
@@ -53,7 +53,7 @@ func TestHandler_Create(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
 			m := &MockerForHandler{
-				service: mocks.NewServiceInterface(t),
+				service: mocks.NewAccountServiceInterface(t),
 			}
 			tc.mockSetup(m)
 			h := account.NewHandler(m.service)
@@ -98,7 +98,7 @@ func TestHandler_Get(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.desc, func(t *testing.T) {
 			m := &MockerForHandler{
-				service: mocks.NewServiceInterface(t),
+				service: mocks.NewAccountServiceInterface(t),
 			}
 			tc.mockSetup(m)
 			h := account.NewHandler(m.service)
@@ -151,7 +151,7 @@ func TestHandler_List(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			m := &MockerForHandler{
-				service: mocks.NewServiceInterface(t),
+				service: mocks.NewAccountServiceInterface(t),
 			}
 			tt.mockSetup(m)
 			h := account.NewHandler(m.service)
@@ -202,7 +202,7 @@ func TestHandler_UpdateStatus(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			m := &MockerForHandler{
-				service: mocks.NewServiceInterface(t),
+				service: mocks.NewAccountServiceInterface(t),
 			}
 			tt.mockSetup(m)
 			h := account.NewHandler(m.service)
@@ -246,7 +246,7 @@ func TestHandler_Delete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			m := &MockerForHandler{
-				service: mocks.NewServiceInterface(t),
+				service: mocks.NewAccountServiceInterface(t),
 			}
 			tt.mockSetup(m)
 			h := account.NewHandler(m.service)

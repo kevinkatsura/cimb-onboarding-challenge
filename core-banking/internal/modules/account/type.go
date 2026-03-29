@@ -5,7 +5,7 @@ import (
 	"core-banking/internal/pkg/pagination"
 )
 
-type RepositoryInterface interface {
+type AccountRepositoryInterface interface {
 	Create(acc *Account) error
 	GetByID(id string) (*Account, error)
 	List(ctx context.Context, f ListFilter) ([]Account, int, *pagination.Cursor, *pagination.Cursor, error)
@@ -13,7 +13,7 @@ type RepositoryInterface interface {
 	SoftDelete(id string) error
 }
 
-type ServiceInterface interface {
+type AccountServiceInterface interface {
 	CreateAccount(ctx context.Context, req CreateAccountRequest) (*Account, error)
 	GetAccount(ctx context.Context, id string) (*Account, error)
 	ListAccounts(ctx context.Context, f ListFilter) ([]Account, int, string, string, error)

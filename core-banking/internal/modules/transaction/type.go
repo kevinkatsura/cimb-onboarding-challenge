@@ -5,7 +5,7 @@ import (
 	"core-banking/internal/pkg/pagination"
 )
 
-type RepositoryInterface interface {
+type TransactionRepositoryInterface interface {
 	// Idempotency
 	IsTransactionExists(ctx context.Context, refID string) (bool, error)
 
@@ -23,4 +23,10 @@ type RepositoryInterface interface {
 
 	// List
 	List(ctx context.Context, f ListFilter) ([]TransactionHistoryDTO, int, *pagination.Cursor, *pagination.Cursor, error)
+}
+
+type TransactionServiceInterface interface {
+	Transfer(ctx context.Context, req TransferRequest) error
+	TransferWithLock(ctx context.Context, req TransferRequest) (*TransferResponse, error)
+	transferCriticalSection(ctx context.Context, req TransferRequest) (*TransferResponse, error)
 }
