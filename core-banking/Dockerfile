@@ -24,11 +24,4 @@ COPY .env .env
 
 EXPOSE 8080
 
-ENV DB_HOST=postgres
-ENV DB_PORT=5433
-ENV DB_USER=postgres
-ENV DB_PASSWORD=postgres
-ENV DB_NAME=banking
-ENV DB_SSLMODE=disable
-
 CMD ["core-banking"]
