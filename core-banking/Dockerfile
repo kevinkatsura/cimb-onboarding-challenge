@@ -22,7 +22,7 @@ WORKDIR /app
 COPY migrations ./migrations
 COPY .env .env
 
-EXPOSE 8120
+EXPOSE 8080
 
 ENV DB_HOST=postgres
 ENV DB_PORT=5433

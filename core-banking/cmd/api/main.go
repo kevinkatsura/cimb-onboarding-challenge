@@ -56,7 +56,7 @@ func main() {
 	mux.HandleFunc("PATCH /accounts/{id}", accountHandler.UpdateStatus)
 	mux.HandleFunc("DELETE /accounts/{id}", accountHandler.Delete)
 
-	port := ":8120"
+	port := ":8080"
 	srv := &http.Server{
 		Addr:    port,
 		Handler: mux,
