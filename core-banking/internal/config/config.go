@@ -16,6 +16,13 @@ type DBConfig struct {
 	SSLMode  string
 }
 
+type RedisConfig struct {
+	Host     string
+	Port     string
+	Password string
+	DB       int
+}
+
 func LoadConfig() *DBConfig {
 	err := godotenv.Load()
 	if err != nil {
@@ -29,6 +36,20 @@ func LoadConfig() *DBConfig {
 		Password: getEnv("DB_PASSWORD", "postgres"),
 		Name:     getEnv("DB_NAME", "banking"),
 		SSLMode:  getEnv("DB_SSLMODE", "disable"),
+	}
+}
+
+func LoadRedisConfig() *RedisConfig {
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("No .env file found, using system env")
+	}
+
+	return &RedisConfig{
+		Host:     getEnv("REDIS_HOST", "localhost"),
+		Port:     getEnv("REDIS_PORT", "6379"),
+		Password: getEnv("REDIS_PASSWORD", ""),
+		DB:       0,
 	}
 }
 

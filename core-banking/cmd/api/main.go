@@ -17,9 +17,15 @@ import (
 
 func main() {
 	cfg := config.LoadConfig()
+	redisCfg := config.LoadRedisConfig()
+
 	// ---- DB Bootstrap ----
 	database.EnsureDatabase(cfg)
 	db := database.NewPostgres(cfg)
+
+	// ---- Redis Connection ----
+	redisClient := database.NewRedis(redisCfg)
+	defer database.CloseRedis(redisClient)
 
 	// ---- Migrations ----
 	database.RunMigrateUp(cfg)
@@ -41,6 +47,7 @@ func main() {
 	// Account
 	accountRepo := account.NewRepository(db)
 	accountService := account.NewService(accountRepo, &account.RandomAccountNumberGenerator{})
+	accountService.SetRedisClient(redisClient) // Inject Redis client
 	accountHandler := account.NewHandler(accountService)
 
 	// ---- HTTP Handler ----
@@ -61,8 +68,6 @@ func main() {
 		Addr:    port,
 		Handler: mux,
 	}
-	log.Println("Server is running on port " + port)
-	log.Fatal(srv.ListenAndServe())
 
 	// ---- Graceful Shutdown Handling ----
 	ctx, stop := signal.NotifyContext(
@@ -71,6 +76,14 @@ func main() {
 		syscall.SIGTERM,
 	)
 	defer stop()
+
+	// ---- Start Server in Goroutine ----
+	go func() {
+		log.Println("Server is running on port " + port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
 
 	<-ctx.Done()
 	log.Println("Shutdown signal received")
