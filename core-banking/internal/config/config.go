@@ -1,8 +1,9 @@
 package config
 
 import (
-	"log"
 	"os"
+
+	"core-banking/internal/pkg/logging"
 
 	"github.com/joho/godotenv"
 )
@@ -26,7 +27,7 @@ type RedisConfig struct {
 func LoadConfig() *DBConfig {
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("No .env file found, using system env")
+		logging.Logger().Warn("No .env file found, using system env")
 	}
 
 	return &DBConfig{
@@ -42,7 +43,7 @@ func LoadConfig() *DBConfig {
 func LoadRedisConfig() *RedisConfig {
 	err := godotenv.Load()
 	if err != nil {
-		log.Println("No .env file found, using system env")
+		logging.Logger().Warn("No .env file found, using system env")
 	}
 
 	return &RedisConfig{

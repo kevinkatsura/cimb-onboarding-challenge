@@ -3,8 +3,8 @@ package database
 import (
 	"context"
 	"core-banking/internal/config"
+	"core-banking/internal/pkg/logging"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -28,10 +28,10 @@ func NewRedis(cfg *config.RedisConfig) *redis.Client {
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		logging.Logger().Fatalw("Failed to connect to Redis", "error", err)
 	}
 
-	log.Println("Connected to Redis")
+	logging.Logger().Infow("Connected to Redis")
 	return client
 }
 

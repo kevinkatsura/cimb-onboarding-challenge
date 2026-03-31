@@ -2,10 +2,10 @@ package transaction
 
 import (
 	"context"
+	"core-banking/internal/pkg/logging"
 	"core-banking/internal/pkg/pagination"
 	"core-banking/internal/service"
 	"fmt"
-	"log"
 	"math/rand"
 	"time"
 )
@@ -106,7 +106,7 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) (*TransferR
 		Message:                 "transfer completed successfully",
 	}
 
-	log.Println("transfer_success",
+	logging.Logger().Infow("transfer_success",
 		"source_account", result.SourceAccount,
 		"source_balance_after", result.SourceBalanceAfter,
 		"destination_account", result.DestinationAccount,

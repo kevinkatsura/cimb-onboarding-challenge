@@ -2,7 +2,8 @@ package seeder
 
 import (
 	"context"
-	"log"
+
+	"core-banking/internal/pkg/logging"
 
 	"github.com/jmoiron/sqlx"
 )
@@ -56,7 +57,7 @@ func (s *Seeder) Seed(ctx context.Context) error {
 		return err
 	}
 
-	log.Println("Seeding completed")
+	logging.Logger().Info("Seeding completed")
 
 	return tx.Commit()
 }

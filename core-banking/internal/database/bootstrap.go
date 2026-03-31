@@ -3,11 +3,11 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"log"
-
-	_ "github.com/lib/pq"
 
 	"core-banking/internal/config"
+	"core-banking/internal/pkg/logging"
+
+	_ "github.com/lib/pq"
 )
 
 func EnsureDatabase(cfg *config.DBConfig) {
@@ -19,7 +19,7 @@ func EnsureDatabase(cfg *config.DBConfig) {
 
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
-		log.Fatalf("Failed to connect to postgres DB: %v", err)
+		logging.Logger().Fatalw("Failed to connect to postgres DB", "error", err)
 	}
 	defer db.Close()
 
@@ -32,19 +32,19 @@ func EnsureDatabase(cfg *config.DBConfig) {
 	`
 	err = db.QueryRow(query, cfg.Name).Scan(&exists)
 	if err != nil {
-		log.Fatalf("Failed to check DB existence: %v", err)
+		logging.Logger().Fatalw("Failed to check DB existence", "error", err)
 	}
 
 	if exists {
-		log.Println("Database already exists:", cfg.Name)
+		logging.Logger().Infow("Database already exists", "name", cfg.Name)
 		return
 	}
 
 	// Create DB
 	_, err = db.Exec(fmt.Sprintf("CREATE DATABASE %s", cfg.Name))
 	if err != nil {
-		log.Fatalf("Failed to create database: %v", err)
+		logging.Logger().Fatalw("Failed to create database", "error", err)
 	}
 
-	log.Println("Database created:", cfg.Name)
+	logging.Logger().Infow("Database created", "name", cfg.Name)
 }

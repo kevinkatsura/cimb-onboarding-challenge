@@ -2,8 +2,8 @@ package database
 
 import (
 	"core-banking/internal/config"
+	"core-banking/internal/pkg/logging"
 	"errors"
-	"log"
 	"net/url"
 	"path/filepath"
 
@@ -16,7 +16,7 @@ func RunMigrateUp(cfg *config.DBConfig) {
 	// Resolve absolute path dynamically
 	absPath, err := filepath.Abs("migrations")
 	if err != nil {
-		log.Fatalf("failed to resolve migrations path: %v", err)
+		logging.Logger().Fatalw("failed to resolve migrations path", "error", err)
 	}
 
 	// Build proper file:// URI (handles spaces safely)
@@ -25,26 +25,26 @@ func RunMigrateUp(cfg *config.DBConfig) {
 		Path:   absPath,
 	}).String()
 
-	log.Println("Migration source:", sourceURL)
+	logging.Logger().Infow("Migration source", "sourceURL", sourceURL)
 
 	m, err := migrate.New(sourceURL, buildMigrationDSN(cfg))
 	if err != nil {
-		log.Fatalf("migration init failed: %v", err)
+		logging.Logger().Fatalw("migration init failed", "error", err)
 	}
 
 	// Run migrations
 	err = m.Up()
 	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		log.Fatalf("migration up failed: %v", err)
+		logging.Logger().Fatalw("migration up failed", "error", err)
 	}
 
-	log.Println("Migrations UP applied")
+	logging.Logger().Infow("Migrations UP applied")
 }
 func RunMigrateDown(cfg *config.DBConfig) {
 	// Resolve absolute path dynamically
 	absPath, err := filepath.Abs("migrations")
 	if err != nil {
-		log.Fatalf("failed to resolve migrations path: %v", err)
+		logging.Logger().Fatalw("failed to resolve migrations path", "error", err)
 	}
 
 	// Build proper file:// URI (handles spaces safely)
@@ -53,20 +53,20 @@ func RunMigrateDown(cfg *config.DBConfig) {
 		Path:   absPath,
 	}).String()
 
-	log.Println("Migration source:", sourceURL)
+	logging.Logger().Infow("Migration source", "sourceURL", sourceURL)
 
 	m, err := migrate.New(sourceURL, buildMigrationDSN(cfg))
 	if err != nil {
-		log.Fatalf("migration init failed: %v", err)
+		logging.Logger().Fatalw("migration init failed", "error", err)
 	}
 
 	// Run migrations
 	err = m.Down()
 	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
-		log.Fatalf("migration up failed: %v", err)
+		logging.Logger().Fatalw("migration down failed", "error", err)
 	}
 
-	log.Println("Migrations UP applied")
+	logging.Logger().Infow("Migrations DOWN applied")
 }
 
 func buildMigrationDSN(cfg *config.DBConfig) string {

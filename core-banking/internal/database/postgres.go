@@ -2,8 +2,8 @@ package database
 
 import (
 	"core-banking/internal/config"
+	"core-banking/internal/pkg/logging"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -15,7 +15,7 @@ func NewPostgres(cfg *config.DBConfig) *sqlx.DB {
 
 	db, err := sqlx.Connect("postgres", dsn)
 	if err != nil {
-		log.Fatalf("DB connection failed: %v", err)
+		logging.Logger().Fatalw("DB connection failed", "error", err)
 	}
 
 	// Connection pool tuning
@@ -23,6 +23,6 @@ func NewPostgres(cfg *config.DBConfig) *sqlx.DB {
 	db.SetMaxIdleConns(10)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
-	log.Println("Connected to PostgreSQL")
+	logging.Logger().Infow("Connected to PostgreSQL", "host", cfg.Host, "db", cfg.Name)
 	return db
 }

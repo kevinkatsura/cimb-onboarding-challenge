@@ -7,8 +7,8 @@ import (
 	"core-banking/internal/database/seeder"
 	"core-banking/internal/modules/account"
 	"core-banking/internal/modules/transaction"
+	"core-banking/internal/pkg/logging"
 	"core-banking/internal/service"
-	"log"
 	"net/http"
 	"os/signal"
 	"syscall"
@@ -16,6 +16,12 @@ import (
 )
 
 func main() {
+	logger, _, err := logging.InitLogger()
+	if err != nil {
+		panic(err)
+	}
+	defer logger.Sync()
+
 	cfg := config.LoadConfig()
 	redisCfg := config.LoadRedisConfig()
 
@@ -33,9 +39,9 @@ func main() {
 	// ---- Seeder ----
 	s := seeder.New(db)
 	if err := s.Seed(context.Background()); err != nil {
-		log.Fatal(err)
+		logging.Logger().Fatalw("seed failed", "error", err)
 	}
-	log.Println("Seeding completed")
+	logging.Logger().Infow("seeding completed")
 
 	lock := service.NewAccountLockManager()
 
@@ -79,26 +85,26 @@ func main() {
 
 	// ---- Start Server in Goroutine ----
 	go func() {
-		log.Println("Server is running on port " + port)
+		logging.Logger().Infow("server starting", "port", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error: %v", err)
+			logging.Logger().Fatalw("server error", "error", err)
 		}
 	}()
 
 	<-ctx.Done()
-	log.Println("Shutdown signal received")
+	logging.Logger().Infow("shutdown signal received")
 
 	// ---- Graceful HTTP Shutdown ----
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Println("HTTP shutdown error:", err)
+		logging.Logger().Errorw("http shutdown error", "error", err)
 	} else {
-		log.Println("HTTP server stopped gracefully")
+		logging.Logger().Infow("http server stopped gracefully")
 	}
 
 	database.RunMigrateDown(cfg)
 
-	log.Println("Application exited")
+	logging.Logger().Infow("application exited")
 }
