@@ -17,7 +17,7 @@ type RedisCache struct {
 func NewRedisCache(client *redis.Client) *RedisCache {
 	return &RedisCache{
 		client: client,
-		ttl:    10 * time.Minute, // Default TTL for account cache
+		ttl:    1 * time.Minute,
 	}
 }
 
@@ -68,7 +68,7 @@ func (c *RedisCache) DeleteAccount(ctx context.Context, id string) error {
 // SetAccountBalance caches account balance separately (shorter TTL)
 func (c *RedisCache) SetAccountBalance(ctx context.Context, accountID string, balance int64) error {
 	key := BalanceKeyPrefix + accountID
-	return c.client.Set(ctx, key, balance, 5*time.Minute).Err()
+	return c.client.Set(ctx, key, balance, c.ttl).Err()
 }
 
 // GetAccountBalance retrieves cached balance
@@ -115,7 +115,7 @@ func (c *RedisCache) SetAccountList(ctx context.Context, cacheKey string, accoun
 	}
 
 	key := AccountListPrefix + cacheKey
-	return c.client.Set(ctx, key, jsonData, 5*time.Minute).Err()
+	return c.client.Set(ctx, key, jsonData, c.ttl).Err()
 }
 
 // GetAccountList retrieves cached account list

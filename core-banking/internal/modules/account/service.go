@@ -19,7 +19,7 @@ func NewService(repo AccountRepositoryInterface, accNumGen AccountNumberGenerato
 	return &Service{
 		repo:      repo,
 		accNumGen: accNumGen,
-		cache:     nil, // Will be set via dependency injection
+		cache:     nil,
 	}
 }
 
@@ -56,7 +56,6 @@ func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 		go func() {
 			ctx := context.Background()
 			s.cache.SetAccount(ctx, &acc)
-			// Initialize balance cache
 			s.cache.SetAccountBalance(ctx, acc.ID, 0)
 		}()
 	}
@@ -70,7 +69,6 @@ func (s *Service) GetAccount(ctx context.Context, id string) (*Account, error) {
 		if cachedAccount, err := s.cache.GetAccount(ctx, id); err == nil && cachedAccount != nil {
 			return cachedAccount, nil
 		}
-		// Cache miss or error - continue to database
 	}
 
 	// Get from database
@@ -82,7 +80,7 @@ func (s *Service) GetAccount(ctx context.Context, id string) (*Account, error) {
 	// Cache the result asynchronously (don't block response)
 	if s.cache != nil {
 		go func() {
-			ctx := context.Background() // Use background context for async operation
+			ctx := context.Background()
 			s.cache.SetAccount(ctx, account)
 		}()
 	}
@@ -98,6 +96,14 @@ func (s *Service) ListAccounts(ctx context.Context, f ListFilter) ([]Account, in
 		f.Direction = "next"
 	}
 
+	// // Try cache first (cache-aside pattern)
+	// if s.cache != nil {
+	// 	// cache hit
+	// 	if cachedAccount, total, err := s.cache.GetAccountList(ctx, "id"); err == nil && cachedAccount != nil {
+	// 		return cachedAccount, total, "", "", err
+	// 	}
+	// }
+
 	accounts, total, nextC, prevC, err := s.repo.List(ctx, f)
 	if err != nil {
 		return nil, 0, "", "", err
@@ -110,6 +116,13 @@ func (s *Service) ListAccounts(ctx context.Context, f ListFilter) ([]Account, in
 	if prevC != nil {
 		prevCursor, _ = pagination.EncodeCursor(*prevC)
 	}
+
+	// if s.cache != nil {
+	// 	go func() {
+	// 		ctx := context.Background()
+	// 		s.cache.SetAccountList(ctx, "", accounts, total)
+	// 	}()
+	// }
 
 	return accounts, total, nextCursor, prevCursor, nil
 }
