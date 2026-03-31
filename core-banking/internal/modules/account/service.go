@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"core-banking/internal/pkg/logging"
 	"core-banking/internal/pkg/pagination"
 	"fmt"
 	"time"
@@ -48,6 +49,11 @@ func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 	// 2. Create account
 	err = s.repo.Create(&acc)
 	if err != nil {
+		logging.Logger().Errorw("failed_to_create_account",
+			"customer_id", req.CustomerID,
+			"account_type", req.AccountType,
+			"error", err,
+		)
 		return nil, err
 	}
 
@@ -60,6 +66,12 @@ func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 		}()
 	}
 
+	logging.Logger().Infow("account_created_successfully",
+		"account_id", acc.ID,
+		"account_number", acc.AccountNumber,
+		"customer_id", req.CustomerID,
+		"account_type", req.AccountType,
+	)
 	return &acc, err
 }
 
@@ -74,6 +86,10 @@ func (s *Service) GetAccount(ctx context.Context, id string) (*Account, error) {
 	// Get from database
 	account, err := s.repo.GetByID(id)
 	if err != nil {
+		logging.Logger().Warnw("account_not_found",
+			"account_id", id,
+			"error", err,
+		)
 		return nil, err
 	}
 
@@ -85,6 +101,10 @@ func (s *Service) GetAccount(ctx context.Context, id string) (*Account, error) {
 		}()
 	}
 
+	logging.Logger().Debugw("account_retrieved_from_db",
+		"account_id", id,
+		"account_number", account.AccountNumber,
+	)
 	return account, nil
 }
 
@@ -130,12 +150,22 @@ func (s *Service) ListAccounts(ctx context.Context, f ListFilter) ([]Account, in
 func (s *Service) UpdateStatus(ctx context.Context, id string, status string) error {
 	// business rule
 	if status != "active" && status != "frozen" && status != "closed" {
+		logging.Logger().Errorw("invalid_account_status_requested",
+			"account_id", id,
+			"status", status,
+			"valid_statuses", []string{"active", "frozen", "closed"},
+		)
 		return fmt.Errorf("invalid status")
 	}
 
 	// Update database
 	err := s.repo.UpdateStatus(id, status)
 	if err != nil {
+		logging.Logger().Errorw("failed_to_update_account_status",
+			"account_id", id,
+			"new_status", status,
+			"error", err,
+		)
 		return err
 	}
 
@@ -147,6 +177,10 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status string) er
 		}()
 	}
 
+	logging.Logger().Infow("account_status_updated",
+		"account_id", id,
+		"new_status", status,
+	)
 	return nil
 }
 
@@ -159,16 +193,29 @@ func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 
 	// 2. Business rules (CRITICAL)
 	if acc.AvailableBalance != 0 {
+		logging.Logger().Warnw("account_deletion_blocked_by_balance",
+			"account_id", id,
+			"available_balance", acc.AvailableBalance,
+		)
 		return fmt.Errorf("cannot delete account with non-zero balance")
 	}
 
 	if acc.Status != "closed" {
+		logging.Logger().Warnw("account_deletion_blocked_by_status",
+			"account_id", id,
+			"current_status", acc.Status,
+			"required_status", "closed",
+		)
 		return fmt.Errorf("account must be closed before deletion")
 	}
 
 	// 3. Soft delete
 	err = s.repo.SoftDelete(id)
 	if err != nil {
+		logging.Logger().Errorw("failed_to_delete_account",
+			"account_id", id,
+			"error", err,
+		)
 		return err
 	}
 
@@ -181,21 +228,34 @@ func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 		}()
 	}
 
+	logging.Logger().Infow("account_deleted_successfully",
+		"account_id", id,
+	)
 	return nil
 }
 
 // UpdateAccountBalance demonstrates distributed locking for balance updates
 func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, amount int64) error {
 	if s.cache == nil {
+		logging.Logger().Errorw("redis_client_not_configured",
+			"account_id", accountID,
+		)
 		return fmt.Errorf("redis client not configured")
 	}
 
 	// Acquire distributed lock (30 second TTL)
 	lockAcquired, err := s.cache.AcquireLock(ctx, accountID, 30*time.Second)
 	if err != nil {
+		logging.Logger().Errorw("failed_to_acquire_lock",
+			"account_id", accountID,
+			"error", err,
+		)
 		return fmt.Errorf("failed to acquire lock: %w", err)
 	}
 	if !lockAcquired {
+		logging.Logger().Warnw("account_locked_by_another_process",
+			"account_id", accountID,
+		)
 		return fmt.Errorf("account is currently being modified by another process")
 	}
 
@@ -210,12 +270,23 @@ func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, am
 	// Get current account
 	account, err := s.repo.GetByID(accountID)
 	if err != nil {
+		logging.Logger().Errorw("failed_to_fetch_account_for_balance_update",
+			"account_id", accountID,
+			"error", err,
+		)
 		return err
 	}
 
 	// Update balance
 	newBalance := account.AvailableBalance + amount
 	if newBalance < -account.OverdraftLimit {
+		logging.Logger().Warnw("insufficient_balance_for_operation",
+			"account_id", accountID,
+			"current_balance", account.AvailableBalance,
+			"requested_amount", amount,
+			"resulting_balance", newBalance,
+			"overdraft_limit", account.OverdraftLimit,
+		)
 		return fmt.Errorf("insufficient funds: balance would be %d, overdraft limit %d", newBalance, account.OverdraftLimit)
 	}
 
@@ -228,5 +299,11 @@ func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, am
 		}()
 	}
 
+	logging.Logger().Infow("account_balance_updated",
+		"account_id", accountID,
+		"previous_balance", account.AvailableBalance,
+		"amount_adjusted", amount,
+		"new_balance", newBalance,
+	)
 	return nil
 }

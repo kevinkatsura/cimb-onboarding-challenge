@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -71,6 +73,15 @@ type AccountAPIResponse struct {
 func main() {
 	rand.Seed(time.Now().UnixNano())
 
+	// Initialize logger
+	config := zap.NewProductionConfig()
+	config.Encoding = "json"
+	config.EncoderConfig.TimeKey = "timestamp"
+	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	logger, _ := config.Build(zap.AddCaller())
+	defer logger.Sync()
+	sugar := logger.Sugar()
+
 	client := &http.Client{Timeout: 6 * time.Second}
 
 	// --- Fetch Accounts ---
@@ -84,7 +95,10 @@ func main() {
 	}
 
 	destAccount := accounts[0]
-	fmt.Println("Destination account:", destAccount.ID)
+	sugar.Infow("destination_account_selected",
+		"account_id", destAccount.ID,
+		"account_number", destAccount.AccountNumber,
+	)
 
 	var wg sync.WaitGroup
 
@@ -121,7 +135,13 @@ func main() {
 			resp, err := client.Do(req)
 			if err != nil {
 				atomic.AddInt64(&timeoutCount, 1)
-				fmt.Println("network/timeout error:", err)
+				sugar.Errorw("transfer_network_error",
+					"reference_id", reqBody.ReferenceID,
+					"from_account", src.ID,
+					"to_account", destAccount.ID,
+					"amount", amount,
+					"error", err,
+				)
 				return
 			}
 			defer resp.Body.Close()
@@ -129,7 +149,10 @@ func main() {
 			var apiResp TranferAPIResponse
 			if err := json.NewDecoder(resp.Body).Decode(&apiResp); err != nil {
 				atomic.AddInt64(&systemErrorCount, 1)
-				fmt.Println("decode error:", err)
+				sugar.Errorw("transfer_response_decode_error",
+					"reference_id", reqBody.ReferenceID,
+					"error", err,
+				)
 				return
 			}
 
@@ -137,10 +160,20 @@ func main() {
 				switch apiResp.Error {
 				case "transfer timeout (exceeded 4s)":
 					atomic.AddInt64(&timeoutCount, 1)
+					sugar.Warnw("transfer_timeout",
+						"reference_id", reqBody.ReferenceID,
+					)
 				case "lock timeout":
 					atomic.AddInt64(&lockTimeout, 1)
+					sugar.Warnw("transfer_lock_timeout",
+						"reference_id", reqBody.ReferenceID,
+					)
 				default:
 					atomic.AddInt64(&systemErrorCount, 1)
+					sugar.Errorw("transfer_failed_with_error",
+						"reference_id", reqBody.ReferenceID,
+						"error", apiResp.Error,
+					)
 				}
 				return
 			}
@@ -149,19 +182,30 @@ func main() {
 			switch apiResp.Data.Status {
 			case "success":
 				atomic.AddInt64(&successCount, 1)
-				log.Println("transfer_success",
-					", source_account: ", apiResp.Data.SourceAccount,
-					", source_balane_before: ", src.Balance,
-					", source_balance_after: ", apiResp.Data.SourceBalanceAfter,
-					", destination_account: ", apiResp.Data.DestinationAccount,
-					", destination_balance_before: ", destAccount.Balance+1,
-					", destination_balance_after: ", apiResp.Data.DestinationBalanceAfter,
+				sugar.Infow("transfer_success",
+					"reference_id", reqBody.ReferenceID,
+					"source_account", apiResp.Data.SourceAccount,
+					"source_balance_before", src.Balance,
+					"source_balance_after", apiResp.Data.SourceBalanceAfter,
+					"destination_account", apiResp.Data.DestinationAccount,
+					"destination_balance_before", destAccount.Balance+1,
+					"destination_balance_after", apiResp.Data.DestinationBalanceAfter,
+					"amount", amount,
 				)
 			case "failed":
 				// case: insufficient balance
 				atomic.AddInt64(&businessFailCount, 1)
+				sugar.Warnw("transfer_business_failed",
+					"reference_id", reqBody.ReferenceID,
+					"source_account", apiResp.Data.SourceAccount,
+					"message", apiResp.Data.Message,
+				)
 			default:
 				atomic.AddInt64(&systemErrorCount, 1)
+				sugar.Errorw("transfer_unknown_status",
+					"reference_id", reqBody.ReferenceID,
+					"status", apiResp.Data.Status,
+				)
 			}
 
 		}(i)
@@ -171,15 +215,15 @@ func main() {
 
 	duration := time.Since(start)
 
-	fmt.Println("\n========== RESULT ==========")
-	fmt.Println("Total Requests:", totalRequests)
-	fmt.Println("Success:", successCount)
-	fmt.Println("Business Failed (insufficient balance):", businessFailCount)
-	fmt.Println("Tranfer timeout:", timeoutCount)
-	fmt.Println("Lock timeout:", lockTimeout)
-	fmt.Println("Rest/System Error:", systemErrorCount)
-	fmt.Println("Duration:", duration)
-	fmt.Println("============================")
+	sugar.Infow("concurrent_transfer_test_results",
+		"total_requests", totalRequests,
+		"success_count", successCount,
+		"business_failed_count", businessFailCount,
+		"transfer_timeout_count", timeoutCount,
+		"lock_timeout_count", lockTimeout,
+		"system_error_count", systemErrorCount,
+		"duration_ms", duration.Milliseconds(),
+	)
 }
 
 // --- Helpers ---
