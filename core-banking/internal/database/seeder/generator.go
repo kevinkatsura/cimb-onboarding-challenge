@@ -1,7 +1,7 @@
 package seeder
 
 import (
-	"core-banking/internal/model"
+	"core-banking/internal/domain"
 	"fmt"
 	"math/rand"
 	"time"
@@ -10,16 +10,16 @@ import (
 )
 
 type SeedData struct {
-	Customers       []model.Customer
-	Documents       []model.CustomerDocument
-	Accounts        []model.Account
-	Transactions    []model.Transaction
-	Journals        []model.JournalEntry
-	Ledgers         []model.LedgerEntry
-	Payments        []model.Payment
-	AuditLogs       []model.AuditLog
-	IdempotencyKeys []model.IdempotencyKey
-	FXRates         []model.FXRate
+	Customers       []domain.Customer
+	Documents       []domain.CustomerDocument
+	Accounts        []domain.Account
+	Transactions    []domain.Transaction
+	Journals        []domain.JournalEntry
+	Ledgers         []domain.LedgerEntry
+	Payments        []domain.Payment
+	AuditLogs       []domain.AuditLog
+	IdempotencyKeys []domain.IdempotencyKey
+	FXRates         []domain.FXRate
 }
 
 func ptrTime(t time.Time) *time.Time {
@@ -45,7 +45,7 @@ func GenerateAll(n int) SeedData {
 		amount := int64(rand.Intn(1_000_000) + 1000)
 
 		// CUSTOMER
-		customer := model.Customer{
+		customer := domain.Customer{
 			ID:            customerID,
 			FullName:      fmt.Sprintf("Customer %d", i),
 			DateOfBirth:   time.Now().AddDate(-20-rand.Intn(30), 0, 0),
@@ -60,7 +60,7 @@ func GenerateAll(n int) SeedData {
 		data.Customers = append(data.Customers, customer)
 
 		// DOCUMENT
-		data.Documents = append(data.Documents, model.CustomerDocument{
+		data.Documents = append(data.Documents, domain.CustomerDocument{
 			ID:             uuid.New(),
 			CustomerID:     customerID,
 			DocumentType:   "KTP",
@@ -70,7 +70,7 @@ func GenerateAll(n int) SeedData {
 		})
 
 		// ACCOUNT
-		account := model.Account{
+		account := domain.Account{
 			ID:               accountID,
 			CustomerID:       customerID,
 			AccountNumber:    fmt.Sprintf("ACC%06d", i),
@@ -84,7 +84,7 @@ func GenerateAll(n int) SeedData {
 		data.Accounts = append(data.Accounts, account)
 
 		// TRANSACTION
-		tx := model.Transaction{
+		tx := domain.Transaction{
 			ID:              txID,
 			ReferenceID:     fmt.Sprintf("REF%06d", i),
 			TransactionType: "deposit",
@@ -96,7 +96,7 @@ func GenerateAll(n int) SeedData {
 		data.Transactions = append(data.Transactions, tx)
 
 		// JOURNAL
-		data.Journals = append(data.Journals, model.JournalEntry{
+		data.Journals = append(data.Journals, domain.JournalEntry{
 			ID:            journalID,
 			TransactionID: txID,
 			JournalType:   "deposit",
@@ -104,7 +104,7 @@ func GenerateAll(n int) SeedData {
 
 		// LEDGER (DOUBLE ENTRY)
 		data.Ledgers = append(data.Ledgers,
-			model.LedgerEntry{
+			domain.LedgerEntry{
 				ID:        uuid.New(),
 				JournalID: journalID,
 				AccountID: accountID,
@@ -112,7 +112,7 @@ func GenerateAll(n int) SeedData {
 				Amount:    amount,
 				Currency:  "IDR",
 			},
-			model.LedgerEntry{
+			domain.LedgerEntry{
 				ID:        uuid.New(),
 				JournalID: journalID,
 				AccountID: accountID,
@@ -123,7 +123,7 @@ func GenerateAll(n int) SeedData {
 		)
 
 		// PAYMENT
-		data.Payments = append(data.Payments, model.Payment{
+		data.Payments = append(data.Payments, domain.Payment{
 			ID:            uuid.New(),
 			TransactionID: txID,
 			PaymentMethod: "bank_transfer",
@@ -133,7 +133,7 @@ func GenerateAll(n int) SeedData {
 		})
 
 		// AUDIT
-		data.AuditLogs = append(data.AuditLogs, model.AuditLog{
+		data.AuditLogs = append(data.AuditLogs, domain.AuditLog{
 			ID:         uuid.New(),
 			ActorID:    &customerID,
 			EntityType: "transaction",
@@ -142,14 +142,14 @@ func GenerateAll(n int) SeedData {
 		})
 
 		// IDEMPOTENCY
-		data.IdempotencyKeys = append(data.IdempotencyKeys, model.IdempotencyKey{
+		data.IdempotencyKeys = append(data.IdempotencyKeys, domain.IdempotencyKey{
 			ID:          uuid.New(),
 			Key:         fmt.Sprintf("KEY%06d", i),
 			RequestHash: "hash",
 		})
 
 		// FX
-		data.FXRates = append(data.FXRates, model.FXRate{
+		data.FXRates = append(data.FXRates, domain.FXRate{
 			ID:            uuid.New(),
 			BaseCurrency:  "USD",
 			QuoteCurrency: "IDR",

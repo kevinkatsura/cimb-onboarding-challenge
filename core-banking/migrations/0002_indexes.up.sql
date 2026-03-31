@@ -9,4 +9,4 @@ CREATE INDEX IF NOT EXISTS idx_journal_transaction ON journal_entries(transactio
 --ledger_entries
 CREATE INDEX IF NOT EXISTS idx_ledger_account ON ledger_entries(account_id);
 CREATE INDEX IF NOT EXISTS idx_ledger_account_cursor ON ledger_entries(account_id, created_at DESC, id DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_ledger ON ledger_entries(journal_id, account_id, entry_type);
+CREATE INDEX IF NOT EXISTS idx_unique_ledger ON ledger_entries(journal_id, account_id, entry_type);

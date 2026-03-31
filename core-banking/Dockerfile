@@ -9,7 +9,7 @@ RUN go mod download
 
 # Copy source and build
 COPY . .
-RUN go build -o /core-banking ./cmd/api
+RUN go build -o /core-banking ./cmd/main.go
 
 # Runtime stage
 FROM alpine:3.18

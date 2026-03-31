@@ -3,7 +3,7 @@ package seeder
 import (
 	"context"
 
-	"core-banking/internal/pkg/logging"
+	"core-banking/pkg/logging"
 
 	"github.com/jmoiron/sqlx"
 )
