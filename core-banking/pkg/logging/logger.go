@@ -1,6 +1,9 @@
 package logging
 
 import (
+	"os"
+	"time"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -8,14 +11,13 @@ import (
 var log *zap.SugaredLogger
 
 func InitLogger() (*zap.Logger, *zap.SugaredLogger, error) {
-	config := zap.NewDevelopmentConfig()
-	config.Encoding = "console"
+	// Ensure logs directory exists for promtail scraping
+	os.MkdirAll("logs", 0755)
+
+	config := zap.NewProductionConfig()
+	config.OutputPaths = []string{"stdout", "logs/app.log"}
 	config.EncoderConfig.TimeKey = "timestamp"
-	config.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	config.EncoderConfig.LevelKey = "level"
-	config.EncoderConfig.MessageKey = "message"
-	config.EncoderConfig.CallerKey = "caller"
-	config.EncoderConfig.EncodeLevel = zapcore.LowercaseLevelEncoder
+	config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.RFC3339)
 
 	logger, err := config.Build(zap.AddCaller())
 	if err != nil {

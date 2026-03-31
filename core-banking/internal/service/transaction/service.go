@@ -7,6 +7,7 @@ import (
 	"core-banking/internal/service"
 	"core-banking/pkg/logging"
 	"core-banking/pkg/pagination"
+	"core-banking/pkg/telemetry"
 	"fmt"
 	"math/rand"
 	"time"
@@ -38,6 +39,9 @@ func NewService(repo txDomain.Repository, lockManager service.LockManager) *Serv
 }
 
 func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.TransferResponse, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "transactionService.Transfer")
+	defer span.End()
+
 	logging.Logger().Debugw("transfer_initiated",
 		"reference_id", req.ReferenceID,
 		"from_account", req.FromAccount,
@@ -182,6 +186,9 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 }
 
 func (s *Service) TransferWithLock(ctx context.Context, req dto.TransferRequest) (*dto.TransferResponse, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "transactionService.TransferWithLock")
+	defer span.End()
+
 	lockKey := req.ToAccount
 
 	logging.Logger().Debugw("transfer_with_lock_initiated",

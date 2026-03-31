@@ -12,10 +12,13 @@ import (
 	transactionSvc "core-banking/internal/service/transaction"
 	"core-banking/pkg/idgen"
 	"core-banking/pkg/logging"
+	"core-banking/pkg/telemetry"
 	"net/http"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
@@ -24,6 +27,16 @@ func main() {
 		panic(err)
 	}
 	defer logger.Sync()
+
+	shutdown, err := telemetry.InitProvider(context.Background(), "core-banking-api")
+	if err != nil {
+		logging.Logger().Fatalw("failed to initialize telemetry", "error", err)
+	}
+	defer func() {
+		if err := shutdown(context.Background()); err != nil {
+			logging.Logger().Errorw("failed to shutdown telemetry gracefully", "error", err)
+		}
+	}()
 
 	cfg := config.LoadConfig()
 	redisCfg := config.LoadRedisConfig()
@@ -61,16 +74,16 @@ func main() {
 
 	// ---- HTTP Handler ----
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/transfer", txHandler.Transfer)
-	mux.HandleFunc("POST /v2/transfer", txHandler.TransferWithLock)
-	mux.HandleFunc("GET /transactions", txHandler.ListAll)
-	mux.HandleFunc("GET /accounts/{id}/transactions", txHandler.ListByAccount)
+	mux.Handle("POST /v1/transfer", otelhttp.NewHandler(http.HandlerFunc(txHandler.Transfer), "POST /v1/transfer"))
+	mux.Handle("POST /v2/transfer", otelhttp.NewHandler(http.HandlerFunc(txHandler.TransferWithLock), "POST /v2/transfer"))
+	mux.Handle("GET /transactions", otelhttp.NewHandler(http.HandlerFunc(txHandler.ListAll), "GET /transactions"))
+	mux.Handle("GET /accounts/{id}/transactions", otelhttp.NewHandler(http.HandlerFunc(txHandler.ListByAccount), "GET /accounts/{id}/transactions"))
 
-	mux.HandleFunc("GET /accounts", accountHandler.List)
-	mux.HandleFunc("GET /accounts/{id}", accountHandler.Get)
-	mux.HandleFunc("POST /accounts", accountHandler.Create)
-	mux.HandleFunc("PATCH /accounts/{id}", accountHandler.UpdateStatus)
-	mux.HandleFunc("DELETE /accounts/{id}", accountHandler.Delete)
+	mux.Handle("GET /accounts", otelhttp.NewHandler(http.HandlerFunc(accountHandler.List), "GET /accounts"))
+	mux.Handle("GET /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountHandler.Get), "GET /accounts/{id}"))
+	mux.Handle("POST /accounts", otelhttp.NewHandler(http.HandlerFunc(accountHandler.Create), "POST /accounts"))
+	mux.Handle("PATCH /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountHandler.UpdateStatus), "PATCH /accounts/{id}"))
+	mux.Handle("DELETE /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountHandler.Delete), "DELETE /accounts/{id}"))
 
 	port := ":8080"
 	srv := &http.Server{

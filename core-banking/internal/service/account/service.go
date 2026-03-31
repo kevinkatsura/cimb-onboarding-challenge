@@ -8,6 +8,7 @@ import (
 	"core-banking/pkg/idgen"
 	"core-banking/pkg/logging"
 	"core-banking/pkg/pagination"
+	"core-banking/pkg/telemetry"
 	"fmt"
 	"time"
 
@@ -37,6 +38,9 @@ func (s *Service) SetRedisClient(client *redis.Client) {
 }
 
 func (s *Service) CreateAccount(ctx context.Context, req dto.CreateAccountRequest) (*domain.Account, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "accountService.CreateAccount")
+	defer span.End()
+
 	var acc domain.Account
 
 	// 1. Get account number
@@ -197,6 +201,9 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status string) er
 }
 
 func (s *Service) DeleteAccount(ctx context.Context, id string) error {
+	ctx, span := telemetry.Tracer.Start(ctx, "accountService.DeleteAccount")
+	defer span.End()
+
 	// 1. Lock account
 	acc, err := s.repo.GetByID(id)
 	if err != nil {

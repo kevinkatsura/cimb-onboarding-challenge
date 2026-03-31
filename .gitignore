@@ -6,4 +6,5 @@
 **vendor
 **coverage.out
 **mocks
+**logs
 **/README.md

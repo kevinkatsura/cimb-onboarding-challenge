@@ -31,6 +31,8 @@ services:
     depends_on:
       - postgres
       - redis
+    volumes:
+      - ./logs:/app/logs
     ports:
       - "${API_PORT}:8080"
     environment:
@@ -42,6 +44,65 @@ services:
       DB_SSLMODE: ${DB_SSLMODE}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: core_banking_prometheus
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: core_banking_loki
+    volumes:
+      - ./observability/loki.yml:/etc/loki/local-config.yaml
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: core_banking_promtail
+    volumes:
+      - ./observability/promtail.yml:/etc/promtail/config.yml
+      - ./logs:/var/log/app
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  tempo:
+    image: grafana/tempo:2.2.0
+    container_name: core_banking_tempo
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./observability/tempo.yml:/etc/tempo.yaml
+    ports:
+      - "3200:3200"
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: core_banking_grafana
+    volumes:
+      - ./observability/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
     restart: unless-stopped
 
 volumes:
