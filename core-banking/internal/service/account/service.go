@@ -16,7 +16,26 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"core-banking/internal/domain"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
+
+var (
+	accountCreateCounter metric.Int64Counter
+)
+
+func init() {
+	meter := otel.Meter("core-banking.account")
+	var err error
+	accountCreateCounter, err = meter.Int64Counter("core_banking_accounts_created_total",
+		metric.WithDescription("Total number of accounts successfully created"),
+	)
+	if err != nil {
+		panic(err)
+	}
+}
 
 type Service struct {
 	repo      account.Repository
@@ -81,6 +100,11 @@ func (s *Service) CreateAccount(ctx context.Context, req dto.CreateAccountReques
 			s.cache.SetAccountBalance(ctx, acc.ID.String(), 0)
 		}()
 	}
+
+	accountCreateCounter.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("account_type", req.AccountType),
+		attribute.String("currency", req.Currency),
+	))
 
 	logging.Logger().Infow("account_created_successfully",
 		"account_id", acc.ID,

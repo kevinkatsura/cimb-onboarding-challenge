@@ -13,7 +13,33 @@ import (
 	"time"
 
 	"core-banking/internal/domain"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
+
+var (
+	transferAmountCounter metric.Int64Counter
+	transferCountCounter  metric.Int64Counter
+)
+
+func init() {
+	meter := otel.Meter("core-banking.transaction")
+	var err error
+	transferAmountCounter, err = meter.Int64Counter("core_banking_transfer_amount_total",
+		metric.WithDescription("Total amount transferred successfully"),
+	)
+	if err != nil {
+		panic(err)
+	}
+	transferCountCounter, err = meter.Int64Counter("core_banking_transfer_count_total",
+		metric.WithDescription("Total number of successful transfers"),
+	)
+	if err != nil {
+		panic(err)
+	}
+}
 
 type DelayFunc func()
 
@@ -180,6 +206,9 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 		"amount", req.Amount,
 		"currency", req.Currency,
 	)
+
+	transferAmountCounter.Add(ctx, req.Amount, metric.WithAttributes(attribute.String("currency", req.Currency)))
+	transferCountCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("currency", req.Currency)))
 
 	// 9. Complete transaction
 	return result, s.repo.CompleteTransaction(ctx, txID)

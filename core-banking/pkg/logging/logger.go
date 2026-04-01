@@ -24,7 +24,7 @@ func InitLogger() (*zap.Logger, *zap.SugaredLogger, error) {
 	lokiSyncer := NewLokiSyncer(lokiURL, map[string]string{
 		"job": "core-banking-logs",
 	})
-	
+
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(config.EncoderConfig),
 		zapcore.NewMultiWriteSyncer(zapcore.AddSync(os.Stdout), lokiSyncer),

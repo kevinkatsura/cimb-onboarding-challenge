@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -74,16 +75,22 @@ func main() {
 
 	// ---- HTTP Handler ----
 	mux := http.NewServeMux()
-	mux.Handle("POST /v1/transfer", otelhttp.NewHandler(http.HandlerFunc(txHandler.Transfer), "POST /v1/transfer"))
-	mux.Handle("POST /v2/transfer", otelhttp.NewHandler(http.HandlerFunc(txHandler.TransferWithLock), "POST /v2/transfer"))
-	mux.Handle("GET /transactions", otelhttp.NewHandler(http.HandlerFunc(txHandler.ListAll), "GET /transactions"))
-	mux.Handle("GET /accounts/{id}/transactions", otelhttp.NewHandler(http.HandlerFunc(txHandler.ListByAccount), "GET /accounts/{id}/transactions"))
 
-	mux.Handle("GET /accounts", otelhttp.NewHandler(http.HandlerFunc(accountHandler.List), "GET /accounts"))
-	mux.Handle("GET /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountHandler.Get), "GET /accounts/{id}"))
-	mux.Handle("POST /accounts", otelhttp.NewHandler(http.HandlerFunc(accountHandler.Create), "POST /accounts"))
-	mux.Handle("PATCH /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountHandler.UpdateStatus), "PATCH /accounts/{id}"))
-	mux.Handle("DELETE /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountHandler.Delete), "DELETE /accounts/{id}"))
+	// ---- Prometheus Scrape Endpoint ----
+	mux.Handle("GET /metrics", promhttp.Handler())
+
+	// ---- Transaction Endpoints ----
+	mux.Handle("POST /v1/transfer", otelhttp.NewHandler(http.HandlerFunc(txHandler.Transfer), "TransactionHandler.Transfer"))
+	mux.Handle("POST /v2/transfer", otelhttp.NewHandler(http.HandlerFunc(txHandler.TransferWithLock), "TransactionHandler.TransferWithLock"))
+	mux.Handle("GET /transactions", otelhttp.NewHandler(http.HandlerFunc(txHandler.ListAll), "TransactionHandler.ListAll"))
+	mux.Handle("GET /accounts/{id}/transactions", otelhttp.NewHandler(http.HandlerFunc(txHandler.ListByAccount), "TransactionHandler.ListByAccount"))
+
+	// ---- Account Endpoints ----
+	mux.Handle("GET /accounts", otelhttp.NewHandler(http.HandlerFunc(accountHandler.List), "AccountHandler.ListAccounts"))
+	mux.Handle("GET /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountHandler.Get), "AccountHandler.GetAccountByID"))
+	mux.Handle("POST /accounts", otelhttp.NewHandler(http.HandlerFunc(accountHandler.Create), "AccountHandler.CreateAccount"))
+	mux.Handle("PATCH /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountHandler.UpdateStatus), "AccountHandler.UpdateStatus"))
+	mux.Handle("DELETE /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountHandler.Delete), "AccountHandler.DeleteAccount"))
 
 	port := ":8080"
 	srv := &http.Server{
