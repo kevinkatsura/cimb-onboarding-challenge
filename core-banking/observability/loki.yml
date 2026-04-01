@@ -8,6 +8,8 @@ ingester:
     dir: /tmp/loki/wal
   lifecycler:
     address: 127.0.0.1
+    join_after: 0s
+    min_ready_duration: 0s
     ring:
       kvstore:
         store: inmemory

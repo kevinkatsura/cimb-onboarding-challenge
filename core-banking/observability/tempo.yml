@@ -15,3 +15,10 @@ storage:
       path: /tmp/tempo/blocks
     wal:
       path: /tmp/tempo/wal
+
+ingester:
+  lifecycler:
+    ring:
+      replication_factor: 1
+    join_after: 0s
+    min_ready_duration: 0s
