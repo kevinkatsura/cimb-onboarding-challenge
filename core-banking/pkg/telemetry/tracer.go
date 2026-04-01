@@ -40,7 +40,6 @@ func InitProvider(ctx context.Context, serviceName string) (func(context.Context
 	}
 
 	// TRACER (OTLP gRPC to Tempo)
-	// Try tempo:4317 from within docker, fallback to localhost:4317
 	tempoEndpoint := "tempo:4317"
 	conn, err := grpc.NewClient(tempoEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

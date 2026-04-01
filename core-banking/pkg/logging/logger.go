@@ -11,19 +11,27 @@ import (
 var log *zap.SugaredLogger
 
 func InitLogger() (*zap.Logger, *zap.SugaredLogger, error) {
-	// Ensure logs directory exists for promtail scraping
-	os.MkdirAll("logs", 0755)
-
 	config := zap.NewProductionConfig()
-	config.OutputPaths = []string{"stdout", "logs/app.log"}
 	config.EncoderConfig.TimeKey = "timestamp"
 	config.EncoderConfig.EncodeTime = zapcore.TimeEncoderOfLayout(time.RFC3339)
 
-	logger, err := config.Build(zap.AddCaller())
-	if err != nil {
-		return nil, nil, err
+	lokiURL := "http://loki:3100/loki/api/v1/push"
+	// Fallback for local testing outside of docker
+	if os.Getenv("LOKI_URL") != "" {
+		lokiURL = os.Getenv("LOKI_URL")
 	}
 
+	lokiSyncer := NewLokiSyncer(lokiURL, map[string]string{
+		"job": "core-banking-logs",
+	})
+	
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(config.EncoderConfig),
+		zapcore.NewMultiWriteSyncer(zapcore.AddSync(os.Stdout), lokiSyncer),
+		config.Level,
+	)
+
+	logger := zap.New(core, zap.AddCaller())
 	sugar := logger.Sugar()
 	log = sugar
 	return logger, sugar, nil
