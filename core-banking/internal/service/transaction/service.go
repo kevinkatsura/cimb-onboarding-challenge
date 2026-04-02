@@ -16,6 +16,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -68,6 +69,14 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 	ctx, span := telemetry.Tracer.Start(ctx, "transactionService.Transfer")
 	defer span.End()
 
+	span.SetAttributes(
+		attribute.String("reference.id", req.ReferenceID),
+		attribute.String("account.from", req.FromAccount),
+		attribute.String("account.to", req.ToAccount),
+		attribute.Int64("transfer.amount", req.Amount),
+		attribute.String("transfer.currency", req.Currency),
+	)
+
 	logging.Logger().Debugw("transfer_initiated",
 		"reference_id", req.ReferenceID,
 		"from_account", req.FromAccount,
@@ -112,7 +121,11 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 	}
 
 	// 4. Validation
+	span.AddEvent("Validating balances")
 	if sender.Balance < req.Amount {
+		err := fmt.Errorf("insufficient balance")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "sender has insufficient funds")
 		logging.Logger().Warnw("insufficient_balance_for_transfer",
 			"from_account", req.FromAccount,
 			"to_account", req.ToAccount,
@@ -120,10 +133,11 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 			"requested_amount", req.Amount,
 			"reference_id", req.ReferenceID,
 		)
-		return nil, fmt.Errorf("insufficient balance")
+		return nil, err
 	}
 
 	// 5. Insert transaction
+	_, dbSpan := telemetry.Tracer.Start(ctx, "repo.InsertTransactionGraph")
 	txID, err := s.repo.InsertTransaction(ctx, domain.InsertTransactionParams{
 		ReferenceID: req.ReferenceID,
 		Amount:      req.Amount,
@@ -131,6 +145,10 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 		CustomerID:  sender.CustomerID,
 	})
 	if err != nil {
+		dbSpan.RecordError(err)
+		dbSpan.End()
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "transaction tracking insert failed")
 		logging.Logger().Errorw("failed_to_insert_transaction",
 			"reference_id", req.ReferenceID,
 			"error", err,
@@ -211,6 +229,8 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 	transferCountCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("currency", req.Currency)))
 
 	// 9. Complete transaction
+	dbSpan.End()
+	span.SetStatus(codes.Ok, "transfer executed successfully")
 	return result, s.repo.CompleteTransaction(ctx, txID)
 }
 

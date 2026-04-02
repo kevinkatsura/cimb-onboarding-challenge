@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -22,9 +23,9 @@ import (
 var Tracer trace.Tracer
 var Meter metric.Meter
 
-// func init() {
-// 	Tracer = noop.NewTracerProvider().Tracer("default-noop")
-// }
+func init() {
+	Tracer = noop.NewTracerProvider().Tracer("default-noop")
+}
 
 func InitProvider(ctx context.Context, serviceName string) (func(context.Context) error, error) {
 	res, err := resource.Merge(

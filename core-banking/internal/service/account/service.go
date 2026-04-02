@@ -19,6 +19,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -60,6 +61,12 @@ func (s *Service) CreateAccount(ctx context.Context, req dto.CreateAccountReques
 	ctx, span := telemetry.Tracer.Start(ctx, "accountService.CreateAccount")
 	defer span.End()
 
+	span.SetAttributes(
+		attribute.String("customer.id", req.CustomerID),
+		attribute.String("account.type", req.AccountType),
+		attribute.String("currency", req.Currency),
+	)
+
 	var acc domain.Account
 
 	// 1. Get account number
@@ -70,6 +77,8 @@ func (s *Service) CreateAccount(ctx context.Context, req dto.CreateAccountReques
 
 	customerID, err := uuid.Parse(req.CustomerID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "invalid customer ID format")
 		return nil, fmt.Errorf("invalid customer ID format: %w", err)
 	}
 
@@ -84,6 +93,8 @@ func (s *Service) CreateAccount(ctx context.Context, req dto.CreateAccountReques
 	// 2. Create account
 	err = s.repo.Create(&acc)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "database create failed")
 		logging.Logger().Errorw("failed_to_create_account",
 			"customer_id", req.CustomerID,
 			"account_type", req.AccountType,
@@ -116,16 +127,31 @@ func (s *Service) CreateAccount(ctx context.Context, req dto.CreateAccountReques
 }
 
 func (s *Service) GetAccount(ctx context.Context, id string) (*domain.Account, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "accountService.GetAccount")
+	defer span.End()
+	span.SetAttributes(attribute.String("account.id", id))
+
 	// Try cache first (cache-aside pattern)
 	if s.cache != nil {
-		if cachedAccount, err := s.cache.GetAccount(ctx, id); err == nil && cachedAccount != nil {
+		_, cacheSpan := telemetry.Tracer.Start(ctx, "cache.GetAccount")
+		cachedAccount, err := s.cache.GetAccount(ctx, id)
+		cacheSpan.End()
+
+		if err == nil && cachedAccount != nil {
+			span.SetAttributes(attribute.Bool("cache.hit", true))
 			return cachedAccount, nil
 		}
 	}
+	span.SetAttributes(attribute.Bool("cache.hit", false))
 
 	// Get from database
+	_, dbSpan := telemetry.Tracer.Start(ctx, "repo.GetByID")
 	account, err := s.repo.GetByID(id)
+	dbSpan.End()
+
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "account not found in repository")
 		logging.Logger().Warnw("account_not_found",
 			"account_id", id,
 			"error", err,
@@ -227,20 +253,26 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status string) er
 func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "accountService.DeleteAccount")
 	defer span.End()
+	span.SetAttributes(attribute.String("account.id", id))
 
 	// 1. Lock account
 	acc, err := s.repo.GetByID(id)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "account lookup failed")
 		return err
 	}
 
 	// 2. Business rules (CRITICAL)
 	if acc.AvailableBalance != 0 {
+		err := fmt.Errorf("cannot delete account with non-zero balance")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "business validation failed")
 		logging.Logger().Warnw("account_deletion_blocked_by_balance",
 			"account_id", id,
 			"available_balance", acc.AvailableBalance,
 		)
-		return fmt.Errorf("cannot delete account with non-zero balance")
+		return err
 	}
 
 	if acc.Status != "closed" {
