@@ -1,14 +1,12 @@
 package repository
 
 import (
-	"database/sql"
-
 	"github.com/jmoiron/sqlx"
 )
 
 type Tx interface {
 	Get(dest interface{}, query string, args ...interface{}) error
-	Exec(query string, args ...interface{}) (sql.Result, error)
+	Exec(query string, args ...interface{}) (interface{}, error)
 	Commit() error
 	Rollback() error
 	QueryRowx(query string, args ...interface{}) *sqlx.Row
@@ -22,7 +20,7 @@ func (s *sqlxTxWrapper) Get(dest interface{}, query string, args ...interface{})
 	return s.tx.Get(dest, query, args...)
 }
 
-func (s *sqlxTxWrapper) Exec(query string, args ...interface{}) (sql.Result, error) {
+func (s *sqlxTxWrapper) Exec(query string, args ...interface{}) (interface{}, error) {
 	return s.tx.Exec(query, args...)
 }
 

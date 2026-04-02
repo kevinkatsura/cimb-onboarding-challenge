@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"core-banking/pkg/dberror"
-	"database/sql"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -43,10 +42,14 @@ func (d *DefaultTxManager) WithSerializableRetry(ctx context.Context, fn func() 
 }
 
 func (d *DefaultTxManager) BeginSerializableTx(ctx context.Context) (Tx, error) {
-	tx, err := d.DB.BeginTxx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelSerializable,
-	})
+	tx, err := d.DB.BeginTxx(ctx, nil)
 	if err != nil {
+		return nil, err
+	}
+	// Explicitly define isolation level as requested via raw statement instead of standard library wrapper
+	_, err = tx.ExecContext(ctx, "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+	if err != nil {
+		tx.Rollback()
 		return nil, err
 	}
 	return &sqlxTxWrapper{tx: tx}, nil
