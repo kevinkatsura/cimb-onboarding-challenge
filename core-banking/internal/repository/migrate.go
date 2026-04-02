@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
@@ -70,7 +70,7 @@ func RunMigrateDown(cfg *config.DBConfig) {
 }
 
 func buildMigrationDSN(cfg *config.DBConfig) string {
-	return "postgres://" +
+	return "pgx5://" +
 		cfg.User + ":" + cfg.Password + "@" +
 		cfg.Host + ":" + cfg.Port + "/" +
 		cfg.Name + "?sslmode=" + cfg.SSLMode

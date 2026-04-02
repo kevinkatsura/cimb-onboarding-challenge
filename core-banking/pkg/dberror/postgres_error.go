@@ -1,10 +1,10 @@
 package dberror
 
-import "github.com/lib/pq"
+import "github.com/jackc/pgx/v5/pgconn"
 
 func IsSerializationError(err error) bool {
-	if pqErr, ok := err.(*pq.Error); ok {
-		return pqErr.Code == "40001"
+	if pgErr, ok := err.(*pgconn.PgError); ok {
+		return pgErr.Code == "40001"
 	}
 	return false
 }

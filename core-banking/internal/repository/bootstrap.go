@@ -7,7 +7,7 @@ import (
 	"core-banking/config"
 	"core-banking/pkg/logging"
 
-	_ "github.com/lib/pq"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func EnsureDatabase(cfg *config.DBConfig) {
@@ -17,7 +17,7 @@ func EnsureDatabase(cfg *config.DBConfig) {
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.SSLMode,
 	)
 
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		logging.Logger().Fatalw("Failed to connect to postgres DB", "error", err)
 	}
