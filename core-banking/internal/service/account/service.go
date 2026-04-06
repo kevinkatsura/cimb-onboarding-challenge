@@ -91,11 +91,11 @@ func (s *Service) CreateAccount(ctx context.Context, req dto.CreateAccountReques
 	}
 
 	// 2. Create account
-	err = s.repo.Create(&acc)
+	err = s.repo.Create(ctx, &acc)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "database create failed")
-		logging.Logger().Errorw("failed_to_create_account",
+		logging.Ctx(ctx).Errorw("failed_to_create_account",
 			"customer_id", req.CustomerID,
 			"account_type", req.AccountType,
 			"error", err,
@@ -117,7 +117,7 @@ func (s *Service) CreateAccount(ctx context.Context, req dto.CreateAccountReques
 		attribute.String("currency", req.Currency),
 	))
 
-	logging.Logger().Infow("account_created_successfully",
+	logging.Ctx(ctx).Infow("account_created_successfully",
 		"account_id", acc.ID,
 		"account_number", acc.AccountNumber,
 		"customer_id", req.CustomerID,
@@ -145,14 +145,12 @@ func (s *Service) GetAccount(ctx context.Context, id string) (*domain.Account, e
 	span.SetAttributes(attribute.Bool("cache.hit", false))
 
 	// Get from database
-	_, dbSpan := telemetry.Tracer.Start(ctx, "repo.GetByID")
-	account, err := s.repo.GetByID(id)
-	dbSpan.End()
+	account, err := s.repo.GetByID(ctx, id)
 
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "account not found in repository")
-		logging.Logger().Warnw("account_not_found",
+		logging.Ctx(ctx).Warnw("account_not_found",
 			"account_id", id,
 			"error", err,
 		)
@@ -167,7 +165,7 @@ func (s *Service) GetAccount(ctx context.Context, id string) (*domain.Account, e
 		}()
 	}
 
-	logging.Logger().Debugw("account_retrieved_from_db",
+	logging.Ctx(ctx).Debugw("account_retrieved_from_db",
 		"account_id", id,
 		"account_number", account.AccountNumber,
 	)
@@ -216,7 +214,7 @@ func (s *Service) ListAccounts(ctx context.Context, f domain.ListFilter) ([]doma
 func (s *Service) UpdateStatus(ctx context.Context, id string, status string) error {
 	// business rule
 	if status != "active" && status != "frozen" && status != "closed" {
-		logging.Logger().Errorw("invalid_account_status_requested",
+		logging.Ctx(ctx).Errorw("invalid_account_status_requested",
 			"account_id", id,
 			"status", status,
 			"valid_statuses", []string{"active", "frozen", "closed"},
@@ -225,9 +223,9 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status string) er
 	}
 
 	// Update database
-	err := s.repo.UpdateStatus(id, status)
+	err := s.repo.UpdateStatus(ctx, id, status)
 	if err != nil {
-		logging.Logger().Errorw("failed_to_update_account_status",
+		logging.Ctx(ctx).Errorw("failed_to_update_account_status",
 			"account_id", id,
 			"new_status", status,
 			"error", err,
@@ -243,7 +241,7 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status string) er
 		}()
 	}
 
-	logging.Logger().Infow("account_status_updated",
+	logging.Ctx(ctx).Infow("account_status_updated",
 		"account_id", id,
 		"new_status", status,
 	)
@@ -256,7 +254,7 @@ func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 	span.SetAttributes(attribute.String("account.id", id))
 
 	// 1. Lock account
-	acc, err := s.repo.GetByID(id)
+	acc, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "account lookup failed")
@@ -268,7 +266,7 @@ func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 		err := fmt.Errorf("cannot delete account with non-zero balance")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "business validation failed")
-		logging.Logger().Warnw("account_deletion_blocked_by_balance",
+		logging.Ctx(ctx).Warnw("account_deletion_blocked_by_balance",
 			"account_id", id,
 			"available_balance", acc.AvailableBalance,
 		)
@@ -276,7 +274,7 @@ func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 	}
 
 	if acc.Status != "closed" {
-		logging.Logger().Warnw("account_deletion_blocked_by_status",
+		logging.Ctx(ctx).Warnw("account_deletion_blocked_by_status",
 			"account_id", id,
 			"current_status", acc.Status,
 			"required_status", "closed",
@@ -285,9 +283,9 @@ func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 	}
 
 	// 3. Soft delete
-	err = s.repo.SoftDelete(id)
+	err = s.repo.SoftDelete(ctx, id)
 	if err != nil {
-		logging.Logger().Errorw("failed_to_delete_account",
+		logging.Ctx(ctx).Errorw("failed_to_delete_account",
 			"account_id", id,
 			"error", err,
 		)
@@ -303,7 +301,7 @@ func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 		}()
 	}
 
-	logging.Logger().Infow("account_deleted_successfully",
+	logging.Ctx(ctx).Infow("account_deleted_successfully",
 		"account_id", id,
 	)
 	return nil
@@ -312,7 +310,7 @@ func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 // UpdateAccountBalance demonstrates distributed locking for balance updates
 func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, amount int64) error {
 	if s.cache == nil {
-		logging.Logger().Errorw("redis_client_not_configured",
+		logging.Ctx(ctx).Errorw("redis_client_not_configured",
 			"account_id", accountID,
 		)
 		return fmt.Errorf("redis client not configured")
@@ -321,14 +319,14 @@ func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, am
 	// Acquire distributed lock (30 second TTL)
 	lockAcquired, err := s.cache.AcquireLock(ctx, accountID, 30*time.Second)
 	if err != nil {
-		logging.Logger().Errorw("failed_to_acquire_lock",
+		logging.Ctx(ctx).Errorw("failed_to_acquire_lock",
 			"account_id", accountID,
 			"error", err,
 		)
 		return fmt.Errorf("failed to acquire lock: %w", err)
 	}
 	if !lockAcquired {
-		logging.Logger().Warnw("account_locked_by_another_process",
+		logging.Ctx(ctx).Warnw("account_locked_by_another_process",
 			"account_id", accountID,
 		)
 		return fmt.Errorf("account is currently being modified by another process")
@@ -343,9 +341,9 @@ func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, am
 	}()
 
 	// Get current account
-	account, err := s.repo.GetByID(accountID)
+	account, err := s.repo.GetByID(ctx, accountID)
 	if err != nil {
-		logging.Logger().Errorw("failed_to_fetch_account_for_balance_update",
+		logging.Ctx(ctx).Errorw("failed_to_fetch_account_for_balance_update",
 			"account_id", accountID,
 			"error", err,
 		)
@@ -355,7 +353,7 @@ func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, am
 	// Update balance
 	newBalance := account.AvailableBalance + amount
 	if newBalance < -account.OverdraftLimit {
-		logging.Logger().Warnw("insufficient_balance_for_operation",
+		logging.Ctx(ctx).Warnw("insufficient_balance_for_operation",
 			"account_id", accountID,
 			"current_balance", account.AvailableBalance,
 			"requested_amount", amount,
@@ -374,7 +372,7 @@ func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, am
 		}()
 	}
 
-	logging.Logger().Infow("account_balance_updated",
+	logging.Ctx(ctx).Infow("account_balance_updated",
 		"account_id", accountID,
 		"previous_balance", account.AvailableBalance,
 		"amount_adjusted", amount,

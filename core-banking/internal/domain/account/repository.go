@@ -9,9 +9,9 @@ import (
 
 type Repository interface {
 	// Account
-	Create(acc *domain.Account) error
-	GetByID(id string) (*domain.Account, error)
+	Create(ctx context.Context, acc *domain.Account) error
+	GetByID(ctx context.Context, id string) (*domain.Account, error)
 	List(ctx context.Context, f domain.ListFilter) ([]domain.Account, int, *pagination.Cursor, *pagination.Cursor, error)
-	UpdateStatus(id string, status string) error
-	SoftDelete(id string) error
+	UpdateStatus(ctx context.Context, id string, status string) error
+	SoftDelete(ctx context.Context, id string) error
 }

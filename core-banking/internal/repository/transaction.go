@@ -9,6 +9,7 @@ import (
 
 	"core-banking/internal/domain"
 	"core-banking/internal/dto"
+	"core-banking/pkg/telemetry"
 )
 
 type TransactionRepository struct {
@@ -20,6 +21,9 @@ func NewTransactionRepository(db *sqlx.DB) *TransactionRepository {
 }
 
 func (r *TransactionRepository) List(ctx context.Context, f domain.TransactionListFilter) ([]dto.TransactionHistoryResponse, int, *pagination.Cursor, *pagination.Cursor, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.List")
+	defer span.End()
+
 	var results []dto.TransactionHistoryResponse
 	var total int
 
@@ -133,6 +137,9 @@ func (r *TransactionRepository) List(ctx context.Context, f domain.TransactionLi
 }
 
 func (r *TransactionRepository) IsTransactionExists(ctx context.Context, refID string) (bool, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.IsTransactionExists")
+	defer span.End()
+
 	var exists bool
 
 	err := r.DB.GetContext(ctx, &exists,
@@ -144,6 +151,9 @@ func (r *TransactionRepository) IsTransactionExists(ctx context.Context, refID s
 }
 
 func (r *TransactionRepository) GetSenderForUpdate(ctx context.Context, accountID string) (domain.SenderAccount, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.GetSenderForUpdate")
+	defer span.End()
+
 	var result domain.SenderAccount
 
 	err := r.DB.GetContext(ctx, &result,
@@ -158,6 +168,9 @@ func (r *TransactionRepository) GetSenderForUpdate(ctx context.Context, accountI
 }
 
 func (r *TransactionRepository) LockReceiver(ctx context.Context, accountID string) error {
+	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.LockReceiver")
+	defer span.End()
+
 	_, err := r.DB.ExecContext(ctx,
 		`SELECT 1 FROM accounts WHERE id=$1 FOR UPDATE`,
 		accountID,
@@ -167,6 +180,9 @@ func (r *TransactionRepository) LockReceiver(ctx context.Context, accountID stri
 }
 
 func (r *TransactionRepository) InsertTransaction(ctx context.Context, p domain.InsertTransactionParams) (string, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.InsertTransaction")
+	defer span.End()
+
 	var txID string
 
 	err := r.DB.GetContext(ctx, &txID,
@@ -183,6 +199,9 @@ func (r *TransactionRepository) InsertTransaction(ctx context.Context, p domain.
 }
 
 func (r *TransactionRepository) InsertJournal(ctx context.Context, txID string) (string, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.InsertJournal")
+	defer span.End()
+
 	var journalID string
 
 	err := r.DB.GetContext(ctx, &journalID,
@@ -196,6 +215,9 @@ func (r *TransactionRepository) InsertJournal(ctx context.Context, txID string) 
 }
 
 func (r *TransactionRepository) InsertLedger(ctx context.Context, p domain.InsertLedgerParams) error {
+	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.InsertLedger")
+	defer span.End()
+
 	_, err := r.DB.ExecContext(ctx,
 		`INSERT INTO ledger_entries(journal_id, account_id, entry_type, amount, currency)
 		 VALUES
@@ -212,6 +234,9 @@ func (r *TransactionRepository) InsertLedger(ctx context.Context, p domain.Inser
 }
 
 func (r *TransactionRepository) DebitAccount(ctx context.Context, accountID string, amount int64) error {
+	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.DebitAccount")
+	defer span.End()
+
 	_, err := r.DB.ExecContext(ctx,
 		`UPDATE accounts
 		 SET available_balance = available_balance - $1
@@ -224,6 +249,9 @@ func (r *TransactionRepository) DebitAccount(ctx context.Context, accountID stri
 }
 
 func (r *TransactionRepository) CreditAccount(ctx context.Context, accountID string, amount int64) error {
+	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.CreditAccount")
+	defer span.End()
+
 	_, err := r.DB.ExecContext(ctx,
 		`UPDATE accounts
 		 SET available_balance = available_balance + $1
@@ -236,6 +264,9 @@ func (r *TransactionRepository) CreditAccount(ctx context.Context, accountID str
 }
 
 func (r *TransactionRepository) CompleteTransaction(ctx context.Context, txID string) error {
+	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.CompleteTransaction")
+	defer span.End()
+
 	_, err := r.DB.ExecContext(ctx,
 		`UPDATE transactions
 		 SET status='completed', completed_at=NOW()

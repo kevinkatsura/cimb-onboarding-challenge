@@ -77,7 +77,7 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 		attribute.String("transfer.currency", req.Currency),
 	)
 
-	logging.Logger().Debugw("transfer_initiated",
+	logging.Ctx(ctx).Debugw("transfer_initiated",
 		"reference_id", req.ReferenceID,
 		"from_account", req.FromAccount,
 		"to_account", req.ToAccount,
@@ -88,14 +88,14 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 	// 1. Idempotency
 	exists, err := s.repo.IsTransactionExists(ctx, req.ReferenceID)
 	if err != nil {
-		logging.Logger().Errorw("idempotency_check_failed",
+		logging.Ctx(ctx).Errorw("idempotency_check_failed",
 			"reference_id", req.ReferenceID,
 			"error", err,
 		)
 		return nil, err
 	}
 	if exists {
-		logging.Logger().Warnw("transaction_already_processed",
+		logging.Ctx(ctx).Warnw("transaction_already_processed",
 			"reference_id", req.ReferenceID,
 		)
 		return nil, fmt.Errorf("idempotency check failed")
@@ -104,7 +104,7 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 	// 2. Lock sender
 	sender, err := s.repo.GetSenderForUpdate(ctx, req.FromAccount)
 	if err != nil {
-		logging.Logger().Errorw("sender_account_not_found",
+		logging.Ctx(ctx).Errorw("sender_account_not_found",
 			"account_id", req.FromAccount,
 			"error", err,
 		)
@@ -113,7 +113,7 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 
 	// 3. Lock receiver
 	if err := s.repo.LockReceiver(ctx, req.ToAccount); err != nil {
-		logging.Logger().Errorw("failed_to_lock_receiver",
+		logging.Ctx(ctx).Errorw("failed_to_lock_receiver",
 			"account_id", req.ToAccount,
 			"error", err,
 		)
@@ -126,7 +126,7 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 		err := fmt.Errorf("insufficient balance")
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "sender has insufficient funds")
-		logging.Logger().Warnw("insufficient_balance_for_transfer",
+		logging.Ctx(ctx).Warnw("insufficient_balance_for_transfer",
 			"from_account", req.FromAccount,
 			"to_account", req.ToAccount,
 			"current_balance", sender.Balance,
@@ -137,7 +137,6 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 	}
 
 	// 5. Insert transaction
-	_, dbSpan := telemetry.Tracer.Start(ctx, "repo.InsertTransactionGraph")
 	txID, err := s.repo.InsertTransaction(ctx, domain.InsertTransactionParams{
 		ReferenceID: req.ReferenceID,
 		Amount:      req.Amount,
@@ -145,11 +144,9 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 		CustomerID:  sender.CustomerID,
 	})
 	if err != nil {
-		dbSpan.RecordError(err)
-		dbSpan.End()
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "transaction tracking insert failed")
-		logging.Logger().Errorw("failed_to_insert_transaction",
+		logging.Ctx(ctx).Errorw("failed_to_insert_transaction",
 			"reference_id", req.ReferenceID,
 			"error", err,
 		)
@@ -159,7 +156,7 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 	// 6. Journal
 	journalID, err := s.repo.InsertJournal(ctx, txID)
 	if err != nil {
-		logging.Logger().Errorw("failed_to_insert_journal",
+		logging.Ctx(ctx).Errorw("failed_to_insert_journal",
 			"transaction_id", txID,
 			"error", err,
 		)
@@ -175,7 +172,7 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 		Currency:  req.Currency,
 	})
 	if err != nil {
-		logging.Logger().Errorw("failed_to_insert_ledger",
+		logging.Ctx(ctx).Errorw("failed_to_insert_ledger",
 			"journal_id", journalID,
 			"error", err,
 		)
@@ -184,7 +181,7 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 
 	// 8. Update balances
 	if err := s.repo.DebitAccount(ctx, req.FromAccount, req.Amount); err != nil {
-		logging.Logger().Errorw("failed_to_debit_account",
+		logging.Ctx(ctx).Errorw("failed_to_debit_account",
 			"from_account", req.FromAccount,
 			"amount", req.Amount,
 			"error", err,
@@ -193,7 +190,7 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 	}
 
 	if err := s.repo.CreditAccount(ctx, req.ToAccount, req.Amount); err != nil {
-		logging.Logger().Errorw("failed_to_credit_account",
+		logging.Ctx(ctx).Errorw("failed_to_credit_account",
 			"to_account", req.ToAccount,
 			"amount", req.Amount,
 			"error", err,
@@ -215,7 +212,7 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 		Message:                 "transfer completed successfully",
 	}
 
-	logging.Logger().Infow("transfer_success",
+	logging.Ctx(ctx).Infow("transfer_success",
 		"transaction_id", txID,
 		"reference_id", req.ReferenceID,
 		"source_account", result.SourceAccount,
@@ -229,7 +226,6 @@ func (s *Service) Transfer(ctx context.Context, req dto.TransferRequest) (*dto.T
 	transferCountCounter.Add(ctx, 1, metric.WithAttributes(attribute.String("currency", req.Currency)))
 
 	// 9. Complete transaction
-	dbSpan.End()
 	span.SetStatus(codes.Ok, "transfer executed successfully")
 	return result, s.repo.CompleteTransaction(ctx, txID)
 }
@@ -240,7 +236,7 @@ func (s *Service) TransferWithLock(ctx context.Context, req dto.TransferRequest)
 
 	lockKey := req.ToAccount
 
-	logging.Logger().Debugw("transfer_with_lock_initiated",
+	logging.Ctx(ctx).Debugw("transfer_with_lock_initiated",
 		"reference_id", req.ReferenceID,
 		"lock_key", lockKey,
 	)
@@ -250,7 +246,7 @@ func (s *Service) TransferWithLock(ctx context.Context, req dto.TransferRequest)
 
 	// Acquire lock
 	if err := s.lockManager.Lock(ctx, lockKey); err != nil {
-		logging.Logger().Errorw("failed_to_acquire_transfer_lock",
+		logging.Ctx(ctx).Errorw("failed_to_acquire_transfer_lock",
 			"lock_key", lockKey,
 			"error", err,
 		)
@@ -273,12 +269,12 @@ func (s *Service) TransferWithLock(ctx context.Context, req dto.TransferRequest)
 	select {
 	case result := <-resultCh:
 		if result.err == nil {
-			logging.Logger().Infow("transfer_with_lock_completed",
+			logging.Ctx(ctx).Infow("transfer_with_lock_completed",
 				"reference_id", req.ReferenceID,
 				"status", "success",
 			)
 		} else {
-			logging.Logger().Warnw("transfer_with_lock_failed",
+			logging.Ctx(ctx).Warnw("transfer_with_lock_failed",
 				"reference_id", req.ReferenceID,
 				"error", result.err,
 			)
@@ -295,7 +291,7 @@ func (s *Service) TransferWithLock(ctx context.Context, req dto.TransferRequest)
 			Message:            "transfer timeout (exceeded 4s)",
 		}
 
-		logging.Logger().Warnw("transfer_with_lock_timeout",
+		logging.Ctx(ctx).Warnw("transfer_with_lock_timeout",
 			"reference_id", req.ReferenceID,
 			"lock_key", lockKey,
 			"timeout_duration", "4s",
@@ -423,7 +419,7 @@ func (s *Service) List(ctx context.Context, f domain.TransactionListFilter) ([]d
 		f.Direction = "next"
 	}
 
-	logging.Logger().Debugw("transaction_list_requested",
+	logging.Ctx(ctx).Debugw("transaction_list_requested",
 		"limit", f.Limit,
 		"direction", f.Direction,
 		"account_id", f.AccountID,
@@ -431,7 +427,7 @@ func (s *Service) List(ctx context.Context, f domain.TransactionListFilter) ([]d
 
 	data, total, nextC, prevC, err := s.repo.List(ctx, f)
 	if err != nil {
-		logging.Logger().Errorw("transaction_list_failed",
+		logging.Ctx(ctx).Errorw("transaction_list_failed",
 			"limit", f.Limit,
 			"account_id", f.AccountID,
 			"error", err,
@@ -447,7 +443,7 @@ func (s *Service) List(ctx context.Context, f domain.TransactionListFilter) ([]d
 		prevCursor, _ = pagination.EncodeCursor(*prevC)
 	}
 
-	logging.Logger().Debugw("transaction_list_retrieved",
+	logging.Ctx(ctx).Debugw("transaction_list_retrieved",
 		"limit", f.Limit,
 		"total_count", total,
 		"returned_count", len(data),

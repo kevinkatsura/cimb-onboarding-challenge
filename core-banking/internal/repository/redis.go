@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -29,6 +30,10 @@ func NewRedis(cfg *config.RedisConfig) *redis.Client {
 
 	if err := client.Ping(ctx).Err(); err != nil {
 		logging.Logger().Fatalw("Failed to connect to Redis", "error", err)
+	}
+
+	if err := redisotel.InstrumentTracing(client); err != nil {
+		logging.Logger().Warnw("Failed to instrument Redis", "error", err)
 	}
 
 	logging.Logger().Infow("Connected to Redis")

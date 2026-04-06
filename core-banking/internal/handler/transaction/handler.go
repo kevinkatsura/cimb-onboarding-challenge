@@ -34,15 +34,17 @@ func NewHandler(service transaction.Interface) *Handler {
 // @Router /v1/transfer [post]
 func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	var req dto.TransferRequest
+	ctx := r.Context()
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logging.Logger().Warnw("transfer_request_invalid_body",
+		logging.Ctx(ctx).Warnw("transfer_request_invalid_body",
 			"error", err,
 		)
 		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: err.Error()})
 		return
 	}
 
-	logging.Logger().Infow("transfer_handler_called",
+	logging.Ctx(ctx).Infow("transfer_handler_called",
 		"reference_id", req.ReferenceID,
 		"from_account", req.FromAccount,
 		"to_account", req.ToAccount,
@@ -50,7 +52,7 @@ func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 
 	data, err := h.service.Transfer(r.Context(), req)
 	if err != nil {
-		logging.Logger().Errorw("transfer_handler_error",
+		logging.Ctx(ctx).Errorw("transfer_handler_error",
 			"reference_id", req.ReferenceID,
 			"error", err,
 		)
@@ -81,16 +83,17 @@ func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 // @Router /v2/transfer [post]
 func (h *Handler) TransferWithLock(w http.ResponseWriter, r *http.Request) {
 	var req dto.TransferRequest
+	ctx := r.Context()
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logging.Logger().Warnw("transfer_with_lock_request_invalid_body",
+		logging.Ctx(ctx).Warnw("transfer_with_lock_request_invalid_body",
 			"error", err,
 		)
 		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: err.Error()})
 		return
 	}
 
-	logging.Logger().Infow("transfer_with_lock_handler_called",
+	logging.Ctx(ctx).Infow("transfer_with_lock_handler_called",
 		"reference_id", req.ReferenceID,
 		"from_account", req.FromAccount,
 		"to_account", req.ToAccount,
@@ -98,7 +101,7 @@ func (h *Handler) TransferWithLock(w http.ResponseWriter, r *http.Request) {
 
 	data, err := h.service.TransferWithLock(r.Context(), req)
 	if err != nil {
-		logging.Logger().Errorw("transfer_with_lock_handler_error",
+		logging.Ctx(ctx).Errorw("transfer_with_lock_handler_error",
 			"reference_id", req.ReferenceID,
 			"error", err,
 		)
@@ -118,10 +121,11 @@ func (h *Handler) TransferWithLock(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleList(w http.ResponseWriter, r *http.Request, accountID *string) {
 	q := r.URL.Query()
+	ctx := r.Context()
 
 	cursor, err := pagination.DecodeCursor(q.Get("cursor"))
 	if err != nil {
-		logging.Logger().Debugw("transaction_list_invalid_cursor",
+		logging.Ctx(ctx).Debugw("transaction_list_invalid_cursor",
 			"account_id", accountID,
 			"error", err,
 		)
@@ -148,7 +152,7 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request, accountID *
 
 	data, total, nextCursor, prevCursor, err := h.service.List(r.Context(), filter)
 	if err != nil {
-		logging.Logger().Errorw("transaction_list_handler_error",
+		logging.Ctx(ctx).Errorw("transaction_list_handler_error",
 			"account_id", accountID,
 			"limit", limit,
 			"error", err,
@@ -157,7 +161,7 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request, accountID *
 		return
 	}
 
-	logging.Logger().Debugw("transaction_list_retrieved",
+	logging.Ctx(ctx).Debugw("transaction_list_retrieved",
 		"account_id", accountID,
 		"limit", limit,
 		"total", total,

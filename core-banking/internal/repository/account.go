@@ -8,6 +8,7 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	"core-banking/internal/domain"
+	"core-banking/pkg/telemetry"
 )
 
 type AccountRepository struct {
@@ -29,7 +30,10 @@ type ListFilter struct {
 	Direction string // "next" or "prev"
 }
 
-func (r *AccountRepository) Create(acc *domain.Account) error {
+func (r *AccountRepository) Create(ctx context.Context, acc *domain.Account) error {
+	ctx, span := telemetry.Tracer.Start(ctx, "AccountRepository.Create")
+	defer span.End()
+
 	query := `
 	INSERT INTO accounts(
 		id, 
@@ -42,7 +46,8 @@ func (r *AccountRepository) Create(acc *domain.Account) error {
 	VALUES(gen_random_uuid(), $1, $2, $3, $4, 'active', $5)
 	RETURNING id, created_at, updated_at, opened_at;`
 
-	return r.DB.QueryRowx(
+	return r.DB.QueryRowxContext(
+		ctx,
 		query,
 		acc.CustomerID,
 		acc.AccountNumber,
@@ -52,9 +57,12 @@ func (r *AccountRepository) Create(acc *domain.Account) error {
 	).StructScan(acc)
 }
 
-func (r *AccountRepository) GetByID(id string) (*domain.Account, error) {
+func (r *AccountRepository) GetByID(ctx context.Context, id string) (*domain.Account, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "AccountRepository.GetByID")
+	defer span.End()
+
 	var acc domain.Account
-	err := r.DB.Get(&acc, `
+	err := r.DB.GetContext(ctx, &acc, `
 		SELECT 	id,
 				customer_id,
 				account_number,
@@ -182,8 +190,11 @@ func (r *AccountRepository) List(ctx context.Context, f domain.ListFilter) ([]do
 	return accounts, total, nextCursor, prevCursor, nil
 }
 
-func (r *AccountRepository) UpdateStatus(id string, status string) error {
-	_, err := r.DB.Exec(`
+func (r *AccountRepository) UpdateStatus(ctx context.Context, id string, status string) error {
+	ctx, span := telemetry.Tracer.Start(ctx, "AccountRepository.UpdateStatus")
+	defer span.End()
+
+	_, err := r.DB.ExecContext(ctx, `
 		UPDATE accounts
 		SET status = $1::text,
 			updated_at = NOW(),
@@ -195,9 +206,12 @@ func (r *AccountRepository) UpdateStatus(id string, status string) error {
 	return err
 }
 
-func (r *AccountRepository) SoftDelete(id string) error {
+func (r *AccountRepository) SoftDelete(ctx context.Context, id string) error {
+	ctx, span := telemetry.Tracer.Start(ctx, "AccountRepository.SoftDelete")
+	defer span.End()
+
 	var affectedID string
-	err := r.DB.QueryRowx(`
+	err := r.DB.QueryRowxContext(ctx, `
 		UPDATE accounts 
 		SET deleted_at = NOW(),
 			status = 'closed',

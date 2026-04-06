@@ -34,7 +34,7 @@ func TestAccountService_GetAccount(t *testing.T) {
 			desc:    "SUCCESS: get account",
 			inputID: "00000000-0000-0000-0000-000000000001",
 			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", "00000000-0000-0000-0000-000000000001").
+				m.repo.On("GetByID", mock.Anything, "00000000-0000-0000-0000-000000000001").
 					Return(&domain.Account{ID: uuid.MustParse("00000000-0000-0000-0000-000000000001")}, nil)
 			},
 			expected: &domain.Account{ID: uuid.MustParse("00000000-0000-0000-0000-000000000001")},
@@ -43,7 +43,7 @@ func TestAccountService_GetAccount(t *testing.T) {
 			desc:    "ERROR: repository failure",
 			inputID: "00000000-0000-0000-0000-000000000001",
 			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", "00000000-0000-0000-0000-000000000001").
+				m.repo.On("GetByID", mock.Anything, "00000000-0000-0000-0000-000000000001").
 					Return(nil, assert.AnError)
 			},
 			wantErr: true,
@@ -154,7 +154,7 @@ func TestAccountService_CreateAccount(t *testing.T) {
 				m.accNumGen.On("Generate").
 					Return("100000000001", nil)
 
-				m.repo.On("Create", mock.MatchedBy(func(acc *domain.Account) bool {
+				m.repo.On("Create", mock.Anything, mock.MatchedBy(func(acc *domain.Account) bool {
 					return acc.AccountNumber == "100000000001" &&
 						acc.CustomerID == uuid.MustParse("00000000-0000-0000-0000-000000000002")
 				})).Return(nil)
@@ -185,7 +185,7 @@ func TestAccountService_CreateAccount(t *testing.T) {
 				m.accNumGen.On("Generate").
 					Return("100000000001", nil)
 
-				m.repo.On("Create", mock.Anything).
+				m.repo.On("Create", mock.Anything, mock.Anything).
 					Return(errors.New("db error"))
 			},
 			wantErr: true,
@@ -238,7 +238,7 @@ func TestAccountService_UpdateStatus(t *testing.T) {
 			desc: "success",
 			args: args{"1", "active"},
 			mockSetup: func(m *MockerForService) {
-				m.repo.On("UpdateStatus", "1", "active").
+				m.repo.On("UpdateStatus", mock.Anything, "1", "active").
 					Return(nil)
 			},
 			wantErr: false,
@@ -247,7 +247,7 @@ func TestAccountService_UpdateStatus(t *testing.T) {
 			desc: "repo error",
 			args: args{"1", "closed"},
 			mockSetup: func(m *MockerForService) {
-				m.repo.On("UpdateStatus", "1", "closed").
+				m.repo.On("UpdateStatus", mock.Anything, "1", "closed").
 					Return(errors.New("db error"))
 			},
 			wantErr: true,
@@ -293,7 +293,7 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 			desc: "get error",
 			args: args{"1"},
 			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", "1").
+				m.repo.On("GetByID", mock.Anything, "1").
 					Return(&domain.Account{}, errors.New("not found"))
 			},
 			wantErr: true,
@@ -302,7 +302,7 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 			desc: "non-zero balance",
 			args: args{"1"},
 			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", "1").
+				m.repo.On("GetByID", mock.Anything, "1").
 					Return(&domain.Account{AvailableBalance: 10, Status: "closed"}, nil)
 			},
 			wantErr: true,
@@ -311,7 +311,7 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 			desc: "not closed",
 			args: args{"1"},
 			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", "1").
+				m.repo.On("GetByID", mock.Anything, "1").
 					Return(&domain.Account{AvailableBalance: 0, Status: "active"}, nil)
 			},
 			wantErr: true,
@@ -320,10 +320,10 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 			desc: "success",
 			args: args{"1"},
 			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", "1").
+				m.repo.On("GetByID", mock.Anything, "1").
 					Return(&domain.Account{AvailableBalance: 0, Status: "closed"}, nil)
 
-				m.repo.On("SoftDelete", "1").
+				m.repo.On("SoftDelete", mock.Anything, "1").
 					Return(nil)
 			},
 			wantErr: false,
@@ -332,10 +332,10 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 			desc: "delete error",
 			args: args{"1"},
 			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", "1").
+				m.repo.On("GetByID", mock.Anything, "1").
 					Return(&domain.Account{AvailableBalance: 0, Status: "closed"}, nil)
 
-				m.repo.On("SoftDelete", "1").
+				m.repo.On("SoftDelete", mock.Anything, "1").
 					Return(errors.New("delete failed"))
 			},
 			wantErr: true,

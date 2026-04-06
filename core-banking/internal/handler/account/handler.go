@@ -34,9 +34,10 @@ func NewHandler(service account.Interface) *Handler {
 // @Router /accounts [post]
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateAccountRequest
+	ctx := r.Context()
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logging.Logger().Warnw("account_create_invalid_request_body",
+		logging.Ctx(ctx).Warnw("account_create_invalid_request_body",
 			"error", err,
 		)
 		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: err.Error()})
@@ -45,7 +46,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	acc, err := h.service.CreateAccount(r.Context(), req)
 	if err != nil {
-		logging.Logger().Errorw("account_create_failed",
+		logging.Ctx(ctx).Errorw("account_create_failed",
 			"customer_id", req.CustomerID,
 			"account_type", req.AccountType,
 			"error", err,
@@ -54,7 +55,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logging.Logger().Infow("account_created_via_handler",
+	logging.Ctx(ctx).Infow("account_created_via_handler",
 		"account_id", acc.ID,
 		"account_number", acc.AccountNumber,
 	)
@@ -72,14 +73,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 // @Router /accounts/{id} [get]
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
+	ctx := r.Context()
 
-	logging.Logger().Debugw("account_get_request",
+	logging.Ctx(ctx).Debugw("account_get_request",
 		"account_id", accountID,
 	)
 
 	acc, err := h.service.GetAccount(r.Context(), accountID)
 	if err != nil {
-		logging.Logger().Warnw("account_get_not_found",
+		logging.Ctx(ctx).Warnw("account_get_not_found",
 			"account_id", accountID,
 			"error", err,
 		)
@@ -104,13 +106,14 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 // @Router /accounts [get]
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	ctx := r.Context()
 
 	limit := 20
 	fmt.Sscanf(q.Get("limit"), "%d", &limit)
 
 	cursor, err := pagination.DecodeCursor(q.Get("cursor"))
 	if err != nil {
-		logging.Logger().Debugw("account_list_invalid_cursor", "error", err)
+		logging.Ctx(ctx).Debugw("account_list_invalid_cursor", "error", err)
 		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: "invalid cursor"})
 		return
 	}
@@ -136,7 +139,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	data, total, nextCursor, prevCursor, err := h.service.ListAccounts(r.Context(), filter)
 	if err != nil {
-		logging.Logger().Errorw("account_list_failed",
+		logging.Ctx(ctx).Errorw("account_list_failed",
 			"limit", limit,
 			"customer_id", filter.CustomerID,
 			"error", err,
@@ -145,7 +148,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logging.Logger().Debugw("account_list_retrieved",
+	logging.Ctx(ctx).Debugw("account_list_retrieved",
 		"limit", limit,
 		"total", total,
 	)
@@ -174,10 +177,11 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 // @Router /accounts/{id} [patch]
 func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
+	ctx := r.Context()
 
 	var req dto.UpdateAccountStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logging.Logger().Warnw("account_update_status_invalid_request",
+		logging.Ctx(ctx).Warnw("account_update_status_invalid_request",
 			"account_id", accountID,
 			"error", err,
 		)
@@ -185,14 +189,14 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logging.Logger().Infow("account_update_status_requested",
+	logging.Ctx(ctx).Infow("account_update_status_requested",
 		"account_id", accountID,
 		"new_status", req.Status,
 	)
 
 	err := h.service.UpdateStatus(r.Context(), accountID, req.Status)
 	if err != nil {
-		logging.Logger().Errorw("account_update_status_failed",
+		logging.Ctx(ctx).Errorw("account_update_status_failed",
 			"account_id", accountID,
 			"requested_status", req.Status,
 			"error", err,
@@ -215,14 +219,15 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 // @Router /accounts/{id} [delete]
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
+	ctx := r.Context()
 
-	logging.Logger().Infow("account_deletion_requested",
+	logging.Ctx(ctx).Infow("account_deletion_requested",
 		"account_id", accountID,
 	)
 
 	err := h.service.DeleteAccount(r.Context(), accountID)
 	if err != nil {
-		logging.Logger().Errorw("account_deletion_failed",
+		logging.Ctx(ctx).Errorw("account_deletion_failed",
 			"account_id", accountID,
 			"error", err,
 		)
@@ -230,7 +235,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logging.Logger().Infow("account_deleted",
+	logging.Ctx(ctx).Infow("account_deleted",
 		"account_id", accountID,
 	)
 	response.JSON(w, http.StatusOK, response.APIResponse{Data: "deleted"})

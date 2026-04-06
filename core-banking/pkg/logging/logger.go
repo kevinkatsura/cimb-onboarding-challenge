@@ -1,9 +1,11 @@
 package logging
 
 import (
+	"context"
 	"os"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -43,4 +45,22 @@ func Logger() *zap.SugaredLogger {
 		return sugar
 	}
 	return log
+}
+
+// Ctx builds a contextual logger extracting OpenTelemetry IDs for Loki correlation.
+func Ctx(ctx context.Context) *zap.SugaredLogger {
+	l := Logger()
+	if ctx == nil {
+		return l
+	}
+
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.HasTraceID() {
+		return l.With(
+			"trace_id", spanCtx.TraceID().String(),
+			"span_id", spanCtx.SpanID().String(),
+		)
+	}
+
+	return l
 }

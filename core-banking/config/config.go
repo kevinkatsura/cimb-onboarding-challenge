@@ -27,7 +27,7 @@ type RedisConfig struct {
 func LoadConfig() *DBConfig {
 	err := godotenv.Load()
 	if err != nil {
-		logging.Logger().Warn("No .env file found, using system env")
+		logging.Logger().Warn("No .env file found, using system env for database config")
 	}
 
 	return &DBConfig{
@@ -43,7 +43,7 @@ func LoadConfig() *DBConfig {
 func LoadRedisConfig() *RedisConfig {
 	err := godotenv.Load()
 	if err != nil {
-		logging.Logger().Warn("No .env file found, using system env")
+		logging.Logger().Warn("No .env file found, using system env for redis config")
 	}
 
 	return &RedisConfig{
