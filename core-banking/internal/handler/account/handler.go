@@ -21,6 +21,17 @@ func NewHandler(service account.Interface) *Handler {
 	return &Handler{service: service}
 }
 
+// Create creates a new bank account.
+// @Summary Create Account
+// @Description Creates a new bank account tied to a customer ID.
+// @Tags accounts
+// @Accept json
+// @Produce json
+// @Param request body dto.CreateAccountRequest true "Account Payload"
+// @Success 200 {object} response.APIResponse{data=domain.Account}
+// @Failure 400 {object} response.APIResponse{error=string}
+// @Failure 500 {object} response.APIResponse{error=string}
+// @Router /accounts [post]
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateAccountRequest
 
@@ -50,6 +61,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, response.APIResponse{Data: acc})
 }
 
+// Get fetches a single bank account uniquely.
+// @Summary Get Account by ID
+// @Description Fetches a bank account from the system given its UUID.
+// @Tags accounts
+// @Produce json
+// @Param id path string true "Account ID"
+// @Success 200 {object} response.APIResponse{data=domain.Account}
+// @Failure 404 {object} response.APIResponse{error=string}
+// @Router /accounts/{id} [get]
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
 
@@ -70,6 +90,18 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, response.APIResponse{Data: acc})
 }
 
+// List retrieves accounts under pagination scopes natively.
+// @Summary List Accounts
+// @Description Lists all bank accounts under specific cursors and filters.
+// @Tags accounts
+// @Produce json
+// @Param limit query int false "Limits response objects"
+// @Param cursor query string false "Pagination Base64 Cursor"
+// @Param customer_id query string false "Filter by Customer ID"
+// @Param status query string false "Filter by Status (active, suspended, closed)"
+// @Success 200 {object} response.APIResponse{data=[]domain.Account,meta=object}
+// @Failure 400 {object} response.APIResponse{error=string}
+// @Router /accounts [get]
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
@@ -128,6 +160,18 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// UpdateStatus transitions an account between active/suspended states.
+// @Summary Update Account Status
+// @Description Manually transitions the active lifecycle state of a bank account.
+// @Tags accounts
+// @Accept json
+// @Produce json
+// @Param id path string true "Account ID"
+// @Param request body dto.UpdateAccountStatusRequest true "Update Payload"
+// @Success 200 {object} response.APIResponse{data=string}
+// @Failure 400 {object} response.APIResponse{error=string}
+// @Failure 500 {object} response.APIResponse{error=string}
+// @Router /accounts/{id} [patch]
 func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
 
@@ -160,6 +204,15 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, response.APIResponse{Data: "updated"})
 }
 
+// Delete softly purges an account.
+// @Summary Delete Account
+// @Description Soft-deletes a bank account if allowed by constraints.
+// @Tags accounts
+// @Produce json
+// @Param id path string true "Account ID"
+// @Success 200 {object} response.APIResponse{data=string}
+// @Failure 400 {object} response.APIResponse{error=string}
+// @Router /accounts/{id} [delete]
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
 

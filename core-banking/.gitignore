@@ -1,0 +1,20 @@
+# Build Outputs
+main
+core-banking
+
+# OpenSSL Certificates
+certs/
+
+# Logs & Temporary Execution
+logs/
+
+# Local Environment Variables
+.env
+.env.local
+
+# CI / Test Outputs
+coverage.out
+*.test
+
+# Go Workspaces
+vendor/

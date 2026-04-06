@@ -1,5 +1,10 @@
 package main
 
+// @title Core Banking API
+// @version 1.0
+// @description API documentation for the Core Banking Application.
+// @BasePath /
+
 import (
 	"context"
 	"core-banking/config"
@@ -12,6 +17,7 @@ import (
 	transactionSvc "core-banking/internal/service/transaction"
 	"core-banking/pkg/idgen"
 	"core-banking/pkg/logging"
+	"core-banking/pkg/middleware"
 	"core-banking/pkg/telemetry"
 	"net/http"
 	"os/signal"
@@ -19,7 +25,10 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
+	_ "core-banking/docs"
 )
 
 func main() {
@@ -56,9 +65,10 @@ func main() {
 	// ---- Seeder ----
 	s := seeder.New(db)
 	if err := s.Seed(context.Background()); err != nil {
-		logging.Logger().Fatalw("seed failed", "error", err)
+		logging.Logger().Warnw("seed bypassed due to collisions", "error", err)
+	} else {
+		logging.Logger().Infow("seeding completed")
 	}
-	logging.Logger().Infow("seeding completed")
 
 	lock := svc.NewAccountLockManager()
 
@@ -75,6 +85,9 @@ func main() {
 
 	// ---- HTTP Handler ----
 	mux := http.NewServeMux()
+
+	// ---- Swagger Endpoint ----
+	mux.Handle("/swagger/", httpSwagger.WrapHandler)
 
 	// ---- Prometheus Scrape Endpoint ----
 	mux.Handle("GET /metrics", promhttp.Handler())
@@ -95,7 +108,7 @@ func main() {
 	port := ":8080"
 	srv := &http.Server{
 		Addr:    port,
-		Handler: mux,
+		Handler: middleware.ForceHTTPS(middleware.CORS(mux)),
 	}
 
 	// ---- Graceful Shutdown Handling ----
@@ -108,9 +121,9 @@ func main() {
 
 	// ---- Start Server in Goroutine ----
 	go func() {
-		logging.Logger().Infow("server starting", "port", port)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logging.Logger().Fatalw("server error", "error", err)
+		logging.Logger().Infow("secure server starting", "port", port)
+		if err := srv.ListenAndServeTLS("certs/server.crt", "certs/server.key"); err != nil && err != http.ErrServerClosed {
+			logging.Logger().Fatalw("secure server error", "error", err)
 		}
 	}()
 

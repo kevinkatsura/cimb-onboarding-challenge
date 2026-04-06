@@ -21,6 +21,17 @@ func NewHandler(service transaction.Interface) *Handler {
 	return &Handler{service: service}
 }
 
+// Transfer performs a standard multi-leg P2P transfer between two accounts.
+// @Summary Account Transfer (Optimistic)
+// @Description Safely processes an inter-account fund transfer linearly.
+// @Tags transactions
+// @Accept json
+// @Produce json
+// @Param request body dto.TransferRequest true "Transfer Payload"
+// @Success 200 {object} response.APIResponse{data=dto.TransferResponse}
+// @Failure 400 {object} response.APIResponse{error=string}
+// @Failure 500 {object} response.APIResponse{error=string}
+// @Router /v1/transfer [post]
 func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	var req dto.TransferRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -57,6 +68,17 @@ func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// TransferWithLock performs an aggressive distributed-lock based transfer.
+// @Summary Account Transfer (Pessimistic Redis Lock)
+// @Description Safely processes a transfer explicitly restricting concurrency on the accounts.
+// @Tags transactions
+// @Accept json
+// @Produce json
+// @Param request body dto.TransferRequest true "Transfer Payload"
+// @Success 200 {object} response.APIResponse{data=dto.TransferResponse}
+// @Failure 400 {object} response.APIResponse{error=string}
+// @Failure 500 {object} response.APIResponse{error=string}
+// @Router /v2/transfer [post]
 func (h *Handler) TransferWithLock(w http.ResponseWriter, r *http.Request) {
 	var req dto.TransferRequest
 
@@ -152,11 +174,33 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request, accountID *
 	})
 }
 
+// ListByAccount retrieves transaction ledger logs isolated natively to a single participant identity.
+// @Summary List Transactions (By Account)
+// @Description Iterates paginated lists isolated for an account.
+// @Tags transactions
+// @Produce json
+// @Param id path string true "Account ID"
+// @Param limit query int false "Limits response objects"
+// @Param cursor query string false "Pagination Base64 Cursor"
+// @Param direction query string false "Pagination Direction (next, prev)"
+// @Success 200 {object} response.APIResponse{data=[]dto.TransactionHistoryResponse,meta=object}
+// @Failure 400 {object} response.APIResponse{error=string}
+// @Router /accounts/{id}/transactions [get]
 func (h *Handler) ListByAccount(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
 	h.handleList(w, r, &accountID)
 }
 
+// ListAll retrieves all transaction ledger logs globally.
+// @Summary List All Transactions
+// @Description Aggregates the global banking journal history explicitly sorted.
+// @Tags transactions
+// @Produce json
+// @Param limit query int false "Limits response objects"
+// @Param cursor query string false "Pagination Base64 Cursor"
+// @Success 200 {object} response.APIResponse{data=[]dto.TransactionHistoryResponse,meta=object}
+// @Failure 400 {object} response.APIResponse{error=string}
+// @Router /transactions [get]
 func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
 	h.handleList(w, r, nil)
 }

@@ -21,6 +21,7 @@ WORKDIR /app
 # Copy migrations and .env into runtime image
 COPY migrations ./migrations
 COPY .env .env
+COPY certs ./certs
 
 EXPOSE 8080
 
