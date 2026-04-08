@@ -6,11 +6,14 @@ import (
 	"core-banking/pkg/logging"
 	"core-banking/pkg/pagination"
 	"core-banking/pkg/response"
+	"core-banking/pkg/telemetry"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"core-banking/internal/domain"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Handler struct {
@@ -35,23 +38,20 @@ func NewHandler(service account.Interface) *Handler {
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateAccountRequest
 	ctx := r.Context()
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(telemetry.HandlerAttrs(r, "POST /accounts")...)
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logging.Ctx(ctx).Warnw("account_create_invalid_request_body",
-			"error", err,
-		)
-		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: err.Error()})
+		response.RespondError(ctx, w, http.StatusBadRequest, err, "account_create_invalid_request_body")
 		return
 	}
 
-	acc, err := h.service.CreateAccount(r.Context(), req)
+	acc, err := h.service.CreateAccount(ctx, req)
 	if err != nil {
-		logging.Ctx(ctx).Errorw("account_create_failed",
+		response.RespondError(ctx, w, http.StatusInternalServerError, err, "account_create_failed",
 			"customer_id", req.CustomerID,
 			"account_type", req.AccountType,
-			"error", err,
 		)
-		response.JSON(w, http.StatusInternalServerError, response.APIResponse{Error: err.Error()})
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		"account_id", acc.ID,
 		"account_number", acc.AccountNumber,
 	)
-	response.JSON(w, http.StatusOK, response.APIResponse{Data: acc})
+	response.RespondOK(ctx, w, http.StatusOK, acc)
 }
 
 // Get fetches a single bank account uniquely.
@@ -74,22 +74,18 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
 	ctx := r.Context()
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(telemetry.HandlerAttrs(r, "GET /accounts/{id}")...)
 
-	logging.Ctx(ctx).Debugw("account_get_request",
-		"account_id", accountID,
-	)
-
-	acc, err := h.service.GetAccount(r.Context(), accountID)
+	acc, err := h.service.GetAccount(ctx, accountID)
 	if err != nil {
-		logging.Ctx(ctx).Warnw("account_get_not_found",
+		response.RespondError(ctx, w, http.StatusNotFound, err, "account_get_not_found",
 			"account_id", accountID,
-			"error", err,
 		)
-		response.JSON(w, http.StatusNotFound, response.APIResponse{Error: err.Error()})
 		return
 	}
 
-	response.JSON(w, http.StatusOK, response.APIResponse{Data: acc})
+	response.RespondOK(ctx, w, http.StatusOK, acc)
 }
 
 // List retrieves accounts under pagination scopes natively.
@@ -107,14 +103,15 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	ctx := r.Context()
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(telemetry.HandlerAttrs(r, "GET /accounts")...)
 
 	limit := 20
 	fmt.Sscanf(q.Get("limit"), "%d", &limit)
 
 	cursor, err := pagination.DecodeCursor(q.Get("cursor"))
 	if err != nil {
-		logging.Ctx(ctx).Debugw("account_list_invalid_cursor", "error", err)
-		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: "invalid cursor"})
+		response.RespondError(ctx, w, http.StatusBadRequest, err, "account_list_invalid_cursor")
 		return
 	}
 
@@ -137,29 +134,20 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		filter.Currency = &v
 	}
 
-	data, total, nextCursor, prevCursor, err := h.service.ListAccounts(r.Context(), filter)
+	data, total, nextCursor, prevCursor, err := h.service.ListAccounts(ctx, filter)
 	if err != nil {
-		logging.Ctx(ctx).Errorw("account_list_failed",
+		response.RespondError(ctx, w, http.StatusInternalServerError, err, "account_list_failed",
 			"limit", limit,
 			"customer_id", filter.CustomerID,
-			"error", err,
 		)
-		response.JSON(w, http.StatusInternalServerError, response.APIResponse{Error: err.Error()})
 		return
 	}
 
-	logging.Ctx(ctx).Debugw("account_list_retrieved",
-		"limit", limit,
-		"total", total,
-	)
-	response.JSON(w, http.StatusOK, response.APIResponse{
-		Data: data,
-		Meta: map[string]interface{}{
-			"limit":       limit,
-			"next_cursor": nextCursor,
-			"prev_cursor": prevCursor,
-			"total":       total,
-		},
+	response.RespondOKWithMeta(ctx, w, http.StatusOK, data, map[string]interface{}{
+		"limit":       limit,
+		"next_cursor": nextCursor,
+		"prev_cursor": prevCursor,
+		"total":       total,
 	})
 }
 
@@ -178,34 +166,27 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
 	ctx := r.Context()
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(telemetry.HandlerAttrs(r, "PATCH /accounts/{id}")...)
 
 	var req dto.UpdateAccountStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logging.Ctx(ctx).Warnw("account_update_status_invalid_request",
+		response.RespondError(ctx, w, http.StatusBadRequest, err, "account_update_status_invalid_request",
 			"account_id", accountID,
-			"error", err,
 		)
-		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: err.Error()})
 		return
 	}
 
-	logging.Ctx(ctx).Infow("account_update_status_requested",
-		"account_id", accountID,
-		"new_status", req.Status,
-	)
-
-	err := h.service.UpdateStatus(r.Context(), accountID, req.Status)
+	err := h.service.UpdateStatus(ctx, accountID, req.Status)
 	if err != nil {
-		logging.Ctx(ctx).Errorw("account_update_status_failed",
+		response.RespondError(ctx, w, http.StatusInternalServerError, err, "account_update_status_failed",
 			"account_id", accountID,
 			"requested_status", req.Status,
-			"error", err,
 		)
-		response.JSON(w, http.StatusInternalServerError, response.APIResponse{Error: err.Error()})
 		return
 	}
 
-	response.JSON(w, http.StatusOK, response.APIResponse{Data: "updated"})
+	response.RespondOK(ctx, w, http.StatusOK, "updated")
 }
 
 // Delete softly purges an account.
@@ -220,23 +201,17 @@ func (h *Handler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
 	ctx := r.Context()
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(telemetry.HandlerAttrs(r, "DELETE /accounts/{id}")...)
 
-	logging.Ctx(ctx).Infow("account_deletion_requested",
-		"account_id", accountID,
-	)
-
-	err := h.service.DeleteAccount(r.Context(), accountID)
+	err := h.service.DeleteAccount(ctx, accountID)
 	if err != nil {
-		logging.Ctx(ctx).Errorw("account_deletion_failed",
+		response.RespondError(ctx, w, http.StatusBadRequest, err, "account_deletion_failed",
 			"account_id", accountID,
-			"error", err,
 		)
-		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: err.Error()})
 		return
 	}
 
-	logging.Ctx(ctx).Infow("account_deleted",
-		"account_id", accountID,
-	)
-	response.JSON(w, http.StatusOK, response.APIResponse{Data: "deleted"})
+	logging.Ctx(ctx).Infow("account_deleted", "account_id", accountID)
+	response.RespondOK(ctx, w, http.StatusOK, "deleted")
 }

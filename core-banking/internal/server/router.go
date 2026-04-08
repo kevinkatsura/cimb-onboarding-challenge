@@ -12,7 +12,6 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-// NewRouter builds the HTTP handler with all routes, middleware, Swagger, and Prometheus.
 func NewRouter(accountH *accountHandler.Handler, txH *txHandler.Handler) http.Handler {
 	mux := http.NewServeMux()
 

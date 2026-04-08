@@ -3,13 +3,13 @@ package repository
 import (
 	"context"
 	"core-banking/pkg/pagination"
+	"core-banking/pkg/telemetry"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
 
 	"core-banking/internal/domain"
 	"core-banking/internal/dto"
-	"core-banking/pkg/telemetry"
 )
 
 type TransactionRepository struct {
@@ -23,6 +23,8 @@ func NewTransactionRepository(db *sqlx.DB) *TransactionRepository {
 func (r *TransactionRepository) List(ctx context.Context, f domain.TransactionListFilter) ([]dto.TransactionHistoryResponse, int, *pagination.Cursor, *pagination.Cursor, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.List")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("TransactionRepository", "List", "Transaction", "")...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "SELECT", "SELECT FROM ledger_entries JOIN journal_entries JOIN transactions", -1)...)
 
 	var results []dto.TransactionHistoryResponse
 	var total int
@@ -139,6 +141,8 @@ func (r *TransactionRepository) List(ctx context.Context, f domain.TransactionLi
 func (r *TransactionRepository) IsTransactionExists(ctx context.Context, refID string) (bool, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.IsTransactionExists")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("TransactionRepository", "IsTransactionExists", "Transaction", "")...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "SELECT", "SELECT EXISTS FROM transactions WHERE reference_id=$1", -1)...)
 
 	var exists bool
 
@@ -153,6 +157,8 @@ func (r *TransactionRepository) IsTransactionExists(ctx context.Context, refID s
 func (r *TransactionRepository) GetSenderForUpdate(ctx context.Context, accountID string) (domain.SenderAccount, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.GetSenderForUpdate")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("TransactionRepository", "GetSenderForUpdate", "Account", accountID)...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "SELECT", "SELECT FROM accounts WHERE id=$1 FOR UPDATE", -1)...)
 
 	var result domain.SenderAccount
 
@@ -170,6 +176,8 @@ func (r *TransactionRepository) GetSenderForUpdate(ctx context.Context, accountI
 func (r *TransactionRepository) LockReceiver(ctx context.Context, accountID string) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.LockReceiver")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("TransactionRepository", "LockReceiver", "Account", accountID)...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "SELECT", "SELECT 1 FROM accounts WHERE id=$1 FOR UPDATE", -1)...)
 
 	_, err := r.DB.ExecContext(ctx,
 		`SELECT 1 FROM accounts WHERE id=$1 FOR UPDATE`,
@@ -182,6 +190,8 @@ func (r *TransactionRepository) LockReceiver(ctx context.Context, accountID stri
 func (r *TransactionRepository) InsertTransaction(ctx context.Context, p domain.InsertTransactionParams) (string, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.InsertTransaction")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("TransactionRepository", "InsertTransaction", "Transaction", "")...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "INSERT", "INSERT INTO transactions", -1)...)
 
 	var txID string
 
@@ -201,6 +211,8 @@ func (r *TransactionRepository) InsertTransaction(ctx context.Context, p domain.
 func (r *TransactionRepository) InsertJournal(ctx context.Context, txID string) (string, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.InsertJournal")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("TransactionRepository", "InsertJournal", "JournalEntry", txID)...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "INSERT", "INSERT INTO journal_entries", -1)...)
 
 	var journalID string
 
@@ -217,6 +229,8 @@ func (r *TransactionRepository) InsertJournal(ctx context.Context, txID string) 
 func (r *TransactionRepository) InsertLedger(ctx context.Context, p domain.InsertLedgerParams) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.InsertLedger")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("TransactionRepository", "InsertLedger", "LedgerEntry", "")...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "INSERT", "INSERT INTO ledger_entries", 2)...)
 
 	_, err := r.DB.ExecContext(ctx,
 		`INSERT INTO ledger_entries(journal_id, account_id, entry_type, amount, currency)
@@ -236,6 +250,8 @@ func (r *TransactionRepository) InsertLedger(ctx context.Context, p domain.Inser
 func (r *TransactionRepository) DebitAccount(ctx context.Context, accountID string, amount int64) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.DebitAccount")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("TransactionRepository", "DebitAccount", "Account", accountID)...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "UPDATE", "UPDATE accounts SET available_balance = available_balance - $1", 1)...)
 
 	_, err := r.DB.ExecContext(ctx,
 		`UPDATE accounts
@@ -251,6 +267,8 @@ func (r *TransactionRepository) DebitAccount(ctx context.Context, accountID stri
 func (r *TransactionRepository) CreditAccount(ctx context.Context, accountID string, amount int64) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.CreditAccount")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("TransactionRepository", "CreditAccount", "Account", accountID)...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "UPDATE", "UPDATE accounts SET available_balance = available_balance + $1", 1)...)
 
 	_, err := r.DB.ExecContext(ctx,
 		`UPDATE accounts
@@ -266,6 +284,8 @@ func (r *TransactionRepository) CreditAccount(ctx context.Context, accountID str
 func (r *TransactionRepository) CompleteTransaction(ctx context.Context, txID string) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.CompleteTransaction")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("TransactionRepository", "CompleteTransaction", "Transaction", txID)...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "UPDATE", "UPDATE transactions SET status='completed'", 1)...)
 
 	_, err := r.DB.ExecContext(ctx,
 		`UPDATE transactions

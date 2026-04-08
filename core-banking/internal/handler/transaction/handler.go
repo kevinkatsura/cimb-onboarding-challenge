@@ -6,11 +6,14 @@ import (
 	"core-banking/pkg/logging"
 	"core-banking/pkg/pagination"
 	"core-banking/pkg/response"
+	"core-banking/pkg/telemetry"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"core-banking/internal/domain"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Handler struct {
@@ -35,12 +38,11 @@ func NewHandler(service transaction.Interface) *Handler {
 func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 	var req dto.TransferRequest
 	ctx := r.Context()
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(telemetry.HandlerAttrs(r, "POST /v1/transfer")...)
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logging.Ctx(ctx).Warnw("transfer_request_invalid_body",
-			"error", err,
-		)
-		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: err.Error()})
+		response.RespondError(ctx, w, http.StatusBadRequest, err, "transfer_request_invalid_body")
 		return
 	}
 
@@ -50,24 +52,15 @@ func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 		"to_account", req.ToAccount,
 	)
 
-	data, err := h.service.Transfer(r.Context(), req)
+	data, err := h.service.Transfer(ctx, req)
 	if err != nil {
-		logging.Ctx(ctx).Errorw("transfer_handler_error",
+		response.RespondError(ctx, w, http.StatusInternalServerError, err, "transfer_handler_error",
 			"reference_id", req.ReferenceID,
-			"error", err,
 		)
-		response.JSON(w, http.StatusInternalServerError, response.APIResponse{
-			Success: false,
-			Error:   err.Error(),
-		})
 		return
 	}
 
-	response.JSON(w, http.StatusOK, response.APIResponse{
-		Data:    data,
-		Success: true,
-		Message: "success",
-	})
+	response.RespondOK(ctx, w, http.StatusOK, data)
 }
 
 // TransferWithLock performs an aggressive distributed-lock based transfer.
@@ -84,12 +77,11 @@ func (h *Handler) Transfer(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) TransferWithLock(w http.ResponseWriter, r *http.Request) {
 	var req dto.TransferRequest
 	ctx := r.Context()
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(telemetry.HandlerAttrs(r, "POST /v2/transfer")...)
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logging.Ctx(ctx).Warnw("transfer_with_lock_request_invalid_body",
-			"error", err,
-		)
-		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: err.Error()})
+		response.RespondError(ctx, w, http.StatusBadRequest, err, "transfer_with_lock_request_invalid_body")
 		return
 	}
 
@@ -99,37 +91,28 @@ func (h *Handler) TransferWithLock(w http.ResponseWriter, r *http.Request) {
 		"to_account", req.ToAccount,
 	)
 
-	data, err := h.service.TransferWithLock(r.Context(), req)
+	data, err := h.service.TransferWithLock(ctx, req)
 	if err != nil {
-		logging.Ctx(ctx).Errorw("transfer_with_lock_handler_error",
+		response.RespondError(ctx, w, http.StatusInternalServerError, err, "transfer_with_lock_handler_error",
 			"reference_id", req.ReferenceID,
-			"error", err,
 		)
-		response.JSON(w, http.StatusInternalServerError, response.APIResponse{
-			Success: false,
-			Error:   err.Error(),
-		})
 		return
 	}
 
-	response.JSON(w, http.StatusOK, response.APIResponse{
-		Success: true,
-		Data:    data,
-		Message: "success",
-	})
+	response.RespondOK(ctx, w, http.StatusOK, data)
 }
 
-func (h *Handler) handleList(w http.ResponseWriter, r *http.Request, accountID *string) {
+func (h *Handler) handleList(w http.ResponseWriter, r *http.Request, accountID *string, route string) {
 	q := r.URL.Query()
 	ctx := r.Context()
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(telemetry.HandlerAttrs(r, route)...)
 
 	cursor, err := pagination.DecodeCursor(q.Get("cursor"))
 	if err != nil {
-		logging.Ctx(ctx).Debugw("transaction_list_invalid_cursor",
+		response.RespondError(ctx, w, http.StatusBadRequest, err, "transaction_list_invalid_cursor",
 			"account_id", accountID,
-			"error", err,
 		)
-		response.JSON(w, http.StatusBadRequest, response.APIResponse{Error: "invalid cursor"})
 		return
 	}
 
@@ -150,31 +133,20 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request, accountID *
 		filter.Status = &v
 	}
 
-	data, total, nextCursor, prevCursor, err := h.service.List(r.Context(), filter)
+	data, total, nextCursor, prevCursor, err := h.service.List(ctx, filter)
 	if err != nil {
-		logging.Ctx(ctx).Errorw("transaction_list_handler_error",
+		response.RespondError(ctx, w, http.StatusInternalServerError, err, "transaction_list_handler_error",
 			"account_id", accountID,
 			"limit", limit,
-			"error", err,
 		)
-		response.JSON(w, http.StatusInternalServerError, response.APIResponse{Error: err.Error()})
 		return
 	}
 
-	logging.Ctx(ctx).Debugw("transaction_list_retrieved",
-		"account_id", accountID,
-		"limit", limit,
-		"total", total,
-	)
-
-	response.JSON(w, http.StatusOK, response.APIResponse{
-		Data: data,
-		Meta: map[string]interface{}{
-			"limit":       limit,
-			"next_cursor": nextCursor,
-			"prev_cursor": prevCursor,
-			"total":       total,
-		},
+	response.RespondOKWithMeta(ctx, w, http.StatusOK, data, map[string]interface{}{
+		"limit":       limit,
+		"next_cursor": nextCursor,
+		"prev_cursor": prevCursor,
+		"total":       total,
 	})
 }
 
@@ -192,7 +164,7 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request, accountID *
 // @Router /accounts/{id}/transactions [get]
 func (h *Handler) ListByAccount(w http.ResponseWriter, r *http.Request) {
 	accountID := r.PathValue("id")
-	h.handleList(w, r, &accountID)
+	h.handleList(w, r, &accountID, "GET /accounts/{id}/transactions")
 }
 
 // ListAll retrieves all transaction ledger logs globally.
@@ -206,5 +178,5 @@ func (h *Handler) ListByAccount(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} response.APIResponse{error=string}
 // @Router /transactions [get]
 func (h *Handler) ListAll(w http.ResponseWriter, r *http.Request) {
-	h.handleList(w, r, nil)
+	h.handleList(w, r, nil, "GET /transactions")
 }

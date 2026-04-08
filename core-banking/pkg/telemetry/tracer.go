@@ -3,7 +3,7 @@ package telemetry
 import (
 	"context"
 	"fmt"
-	"log"
+	"os"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -28,11 +28,22 @@ func init() {
 }
 
 func InitProvider(ctx context.Context, serviceName string) (func(context.Context) error, error) {
+	serviceVersion := os.Getenv("SERVICE_VERSION")
+	if serviceVersion == "" {
+		serviceVersion = "1.0.0"
+	}
+	environment := os.Getenv("APP_ENV")
+	if environment == "" {
+		environment = "development"
+	}
+
 	res, err := resource.Merge(
 		resource.Default(),
 		resource.NewWithAttributes(
 			resource.Default().SchemaURL(),
 			attribute.String("service.name", serviceName),
+			attribute.String("service.version", serviceVersion),
+			attribute.String("deployment.environment", environment),
 		),
 	)
 	if err != nil {
@@ -41,11 +52,15 @@ func InitProvider(ctx context.Context, serviceName string) (func(context.Context
 
 	// TRACER (OTLP gRPC to Tempo)
 	tempoEndpoint := "tempo:4317"
-	conn, err := grpc.NewClient(tempoEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Printf("failed to create gRPC connection to tempo: %v", err)
+	if v := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); v != "" {
+		tempoEndpoint = v
 	}
-	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
+
+	traceExporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithEndpoint(tempoEndpoint),
+		otlptracegrpc.WithDialOption(grpc.WithTransportCredentials(insecure.NewCredentials())),
+		otlptracegrpc.WithInsecure(),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}

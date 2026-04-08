@@ -5,8 +5,23 @@ distributor:
   receivers:
     otlp:
       protocols:
-        http:
         grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+
+memberlist:
+  join_members: []
+
+ingester:
+  lifecycler:
+    ring:
+      kvstore:
+        store: memberlist
+      replication_factor: 1
+    address: 127.0.0.1
+    join_after: 0s
+    min_ready_duration: 0s
 
 storage:
   trace:
@@ -16,9 +31,30 @@ storage:
     wal:
       path: /tmp/tempo/wal
 
-ingester:
-  lifecycler:
-    ring:
-      replication_factor: 1
-    join_after: 0s
-    min_ready_duration: 0s
+metrics_generator:
+  storage:
+    path: /tmp/tempo/generator/wal
+    remote_write: []
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: memberlist
+  processor:
+    span_metrics:
+      dimensions: []
+    service_graphs:
+      dimensions: []
+    local_blocks:
+      flush_to_storage: false
+
+querier:
+  frontend_worker:
+    frontend_address: 127.0.0.1:9095
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors:
+        - span-metrics
+        - service-graphs
+        - local-blocks

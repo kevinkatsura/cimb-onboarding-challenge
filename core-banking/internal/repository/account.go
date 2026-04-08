@@ -3,12 +3,12 @@ package repository
 import (
 	"context"
 	"core-banking/pkg/pagination"
+	"core-banking/pkg/telemetry"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
 
 	"core-banking/internal/domain"
-	"core-banking/pkg/telemetry"
 )
 
 type AccountRepository struct {
@@ -33,6 +33,8 @@ type ListFilter struct {
 func (r *AccountRepository) Create(ctx context.Context, acc *domain.Account) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "AccountRepository.Create")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("AccountRepository", "Create", "Account", "")...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "INSERT", "INSERT INTO accounts", -1)...)
 
 	query := `
 	INSERT INTO accounts(
@@ -60,6 +62,8 @@ func (r *AccountRepository) Create(ctx context.Context, acc *domain.Account) err
 func (r *AccountRepository) GetByID(ctx context.Context, id string) (*domain.Account, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "AccountRepository.GetByID")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("AccountRepository", "GetByID", "Account", id)...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "SELECT", "SELECT FROM accounts WHERE id=$1 FOR UPDATE", -1)...)
 
 	var acc domain.Account
 	err := r.DB.GetContext(ctx, &acc, `
@@ -82,6 +86,11 @@ func (r *AccountRepository) GetByID(ctx context.Context, id string) (*domain.Acc
 }
 
 func (r *AccountRepository) List(ctx context.Context, f domain.ListFilter) ([]domain.Account, int, *pagination.Cursor, *pagination.Cursor, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "AccountRepository.List")
+	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("AccountRepository", "List", "Account", "")...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "SELECT", "SELECT FROM accounts (paginated)", -1)...)
+
 	var accounts []domain.Account
 	var total int
 
@@ -193,6 +202,8 @@ func (r *AccountRepository) List(ctx context.Context, f domain.ListFilter) ([]do
 func (r *AccountRepository) UpdateStatus(ctx context.Context, id string, status string) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "AccountRepository.UpdateStatus")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("AccountRepository", "UpdateStatus", "Account", id)...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "UPDATE", "UPDATE accounts SET status", -1)...)
 
 	_, err := r.DB.ExecContext(ctx, `
 		UPDATE accounts
@@ -209,6 +220,8 @@ func (r *AccountRepository) UpdateStatus(ctx context.Context, id string, status 
 func (r *AccountRepository) SoftDelete(ctx context.Context, id string) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "AccountRepository.SoftDelete")
 	defer span.End()
+	span.SetAttributes(telemetry.RepoAttrs("AccountRepository", "SoftDelete", "Account", id)...)
+	span.SetAttributes(telemetry.DBAttrs("postgresql", "banking", "UPDATE", "UPDATE accounts SET deleted_at", -1)...)
 
 	var affectedID string
 	err := r.DB.QueryRowxContext(ctx, `

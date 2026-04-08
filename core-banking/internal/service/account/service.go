@@ -4,9 +4,9 @@ import (
 	"context"
 	"core-banking/internal/domain/account"
 	"core-banking/internal/dto"
+	"core-banking/pkg/apperror"
 	"core-banking/pkg/cache"
 	"core-banking/pkg/idgen"
-	"core-banking/pkg/logging"
 	"core-banking/pkg/pagination"
 	"core-banking/pkg/telemetry"
 	"fmt"
@@ -52,7 +52,6 @@ func NewService(repo account.Repository, accNumGen idgen.AccountNumberGenerator)
 	}
 }
 
-// SetRedisClient sets the Redis client for caching
 func (s *Service) SetRedisClient(client *redis.Client) {
 	s.cache = cache.NewRedisCache(client)
 }
@@ -60,29 +59,28 @@ func (s *Service) SetRedisClient(client *redis.Client) {
 func (s *Service) CreateAccount(ctx context.Context, req dto.CreateAccountRequest) (*domain.Account, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "accountService.CreateAccount")
 	defer span.End()
-
+	span.SetAttributes(telemetry.ServiceAttrs("CreateAccount", "account", "onboarding")...)
 	span.SetAttributes(
 		attribute.String("customer.id", req.CustomerID),
 		attribute.String("account.type", req.AccountType),
 		attribute.String("currency", req.Currency),
 	)
 
-	var acc domain.Account
-
-	// 1. Get account number
 	accNumber, err := s.accNumGen.Generate()
 	if err != nil {
-		return nil, err
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "account number generation failed")
+		return nil, apperror.NewInternal("failed to generate account number", err)
 	}
 
 	customerID, err := uuid.Parse(req.CustomerID)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "invalid customer ID format")
-		return nil, fmt.Errorf("invalid customer ID format: %w", err)
+		return nil, apperror.NewBadRequest("invalid customer ID format")
 	}
 
-	acc = domain.Account{
+	acc := domain.Account{
 		CustomerID:     customerID,
 		AccountNumber:  accNumber,
 		AccountType:    req.AccountType,
@@ -90,23 +88,15 @@ func (s *Service) CreateAccount(ctx context.Context, req dto.CreateAccountReques
 		OverdraftLimit: req.OverdraftLimit,
 	}
 
-	// 2. Create account
 	err = s.repo.Create(ctx, &acc)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "database create failed")
-		logging.Ctx(ctx).Errorw("failed_to_create_account",
-			"customer_id", req.CustomerID,
-			"account_type", req.AccountType,
-			"error", err,
-		)
-		return nil, err
+		return nil, apperror.NewInternal("failed to create account", err)
 	}
 
-	// 3. Cache the new account (write-through)
 	if s.cache != nil {
-		go func() {
-			ctx := context.Background()
+		defer func() {
 			s.cache.SetAccount(ctx, &acc)
 			s.cache.SetAccountBalance(ctx, acc.ID.String(), 0)
 		}()
@@ -117,21 +107,16 @@ func (s *Service) CreateAccount(ctx context.Context, req dto.CreateAccountReques
 		attribute.String("currency", req.Currency),
 	))
 
-	logging.Ctx(ctx).Infow("account_created_successfully",
-		"account_id", acc.ID,
-		"account_number", acc.AccountNumber,
-		"customer_id", req.CustomerID,
-		"account_type", req.AccountType,
-	)
-	return &acc, err
+	span.SetStatus(codes.Ok, "account created")
+	return &acc, nil
 }
 
 func (s *Service) GetAccount(ctx context.Context, id string) (*domain.Account, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "accountService.GetAccount")
 	defer span.End()
+	span.SetAttributes(telemetry.ServiceAttrs("GetAccount", "account", "inquiry")...)
 	span.SetAttributes(attribute.String("account.id", id))
 
-	// Try cache first (cache-aside pattern)
 	if s.cache != nil {
 		_, cacheSpan := telemetry.Tracer.Start(ctx, "cache.GetAccount")
 		cachedAccount, err := s.cache.GetAccount(ctx, id)
@@ -139,40 +124,34 @@ func (s *Service) GetAccount(ctx context.Context, id string) (*domain.Account, e
 
 		if err == nil && cachedAccount != nil {
 			span.SetAttributes(attribute.Bool("cache.hit", true))
+			span.SetStatus(codes.Ok, "cache hit")
 			return cachedAccount, nil
 		}
 	}
 	span.SetAttributes(attribute.Bool("cache.hit", false))
 
-	// Get from database
 	account, err := s.repo.GetByID(ctx, id)
-
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "account not found in repository")
-		logging.Ctx(ctx).Warnw("account_not_found",
-			"account_id", id,
-			"error", err,
-		)
-		return nil, err
+		span.SetStatus(codes.Error, "account not found")
+		return nil, apperror.NewNotFound("account not found")
 	}
 
-	// Cache the result asynchronously (don't block response)
 	if s.cache != nil {
 		go func() {
-			ctx := context.Background()
 			s.cache.SetAccount(ctx, account)
 		}()
 	}
 
-	logging.Ctx(ctx).Debugw("account_retrieved_from_db",
-		"account_id", id,
-		"account_number", account.AccountNumber,
-	)
+	span.SetStatus(codes.Ok, "account retrieved")
 	return account, nil
 }
 
 func (s *Service) ListAccounts(ctx context.Context, f domain.ListFilter) ([]domain.Account, int, string, string, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "accountService.ListAccounts")
+	defer span.End()
+	span.SetAttributes(telemetry.ServiceAttrs("ListAccounts", "account", "inquiry")...)
+
 	if f.Limit <= 0 || f.Limit > 100 {
 		f.Limit = 20
 	}
@@ -180,17 +159,11 @@ func (s *Service) ListAccounts(ctx context.Context, f domain.ListFilter) ([]doma
 		f.Direction = "next"
 	}
 
-	// // Try cache first (cache-aside pattern)
-	// if s.cache != nil {
-	// 	// cache hit
-	// 	if cachedAccount, total, err := s.cache.GetAccountList(ctx, "id"); err == nil && cachedAccount != nil {
-	// 		return cachedAccount, total, "", "", err
-	// 	}
-	// }
-
 	accounts, total, nextC, prevC, err := s.repo.List(ctx, f)
 	if err != nil {
-		return nil, 0, "", "", err
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "listing failed")
+		return nil, 0, "", "", apperror.NewInternal("failed to list accounts", err)
 	}
 
 	var nextCursor, prevCursor string
@@ -201,39 +174,31 @@ func (s *Service) ListAccounts(ctx context.Context, f domain.ListFilter) ([]doma
 		prevCursor, _ = pagination.EncodeCursor(*prevC)
 	}
 
-	// if s.cache != nil {
-	// 	go func() {
-	// 		ctx := context.Background()
-	// 		s.cache.SetAccountList(ctx, "", accounts, total)
-	// 	}()
-	// }
-
+	span.SetStatus(codes.Ok, "accounts listed")
 	return accounts, total, nextCursor, prevCursor, nil
 }
 
 func (s *Service) UpdateStatus(ctx context.Context, id string, status string) error {
-	// business rule
+	ctx, span := telemetry.Tracer.Start(ctx, "accountService.UpdateStatus")
+	defer span.End()
+	span.SetAttributes(telemetry.ServiceAttrs("UpdateStatus", "account", "lifecycle")...)
+	span.SetAttributes(
+		attribute.String("account.id", id),
+		attribute.String("account.status", status),
+	)
+
 	if status != "active" && status != "frozen" && status != "closed" {
-		logging.Ctx(ctx).Errorw("invalid_account_status_requested",
-			"account_id", id,
-			"status", status,
-			"valid_statuses", []string{"active", "frozen", "closed"},
-		)
-		return fmt.Errorf("invalid status")
+		span.SetStatus(codes.Error, "invalid status")
+		return apperror.NewBadRequest("invalid status: must be active, frozen, or closed")
 	}
 
-	// Update database
 	err := s.repo.UpdateStatus(ctx, id, status)
 	if err != nil {
-		logging.Ctx(ctx).Errorw("failed_to_update_account_status",
-			"account_id", id,
-			"new_status", status,
-			"error", err,
-		)
-		return err
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "status update failed")
+		return apperror.NewInternal("failed to update account status", err)
 	}
 
-	// Invalidate cache (write-through)
 	if s.cache != nil {
 		go func() {
 			ctx := context.Background()
@@ -241,58 +206,42 @@ func (s *Service) UpdateStatus(ctx context.Context, id string, status string) er
 		}()
 	}
 
-	logging.Ctx(ctx).Infow("account_status_updated",
-		"account_id", id,
-		"new_status", status,
-	)
+	span.SetStatus(codes.Ok, "status updated")
 	return nil
 }
 
 func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "accountService.DeleteAccount")
 	defer span.End()
+	span.SetAttributes(telemetry.ServiceAttrs("DeleteAccount", "account", "lifecycle")...)
 	span.SetAttributes(attribute.String("account.id", id))
 
-	// 1. Lock account
 	acc, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "account lookup failed")
-		return err
+		return apperror.NewNotFound("account not found")
 	}
 
-	// 2. Business rules (CRITICAL)
 	if acc.AvailableBalance != 0 {
-		err := fmt.Errorf("cannot delete account with non-zero balance")
+		err := fmt.Errorf("cannot delete account with non-zero balance (balance: %d)", acc.AvailableBalance)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "business validation failed")
-		logging.Ctx(ctx).Warnw("account_deletion_blocked_by_balance",
-			"account_id", id,
-			"available_balance", acc.AvailableBalance,
-		)
-		return err
+		return apperror.NewBadRequest("cannot delete account with non-zero balance")
 	}
 
 	if acc.Status != "closed" {
-		logging.Ctx(ctx).Warnw("account_deletion_blocked_by_status",
-			"account_id", id,
-			"current_status", acc.Status,
-			"required_status", "closed",
-		)
-		return fmt.Errorf("account must be closed before deletion")
+		span.SetStatus(codes.Error, "account not closed")
+		return apperror.NewBadRequest("account must be closed before deletion")
 	}
 
-	// 3. Soft delete
 	err = s.repo.SoftDelete(ctx, id)
 	if err != nil {
-		logging.Ctx(ctx).Errorw("failed_to_delete_account",
-			"account_id", id,
-			"error", err,
-		)
-		return err
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "soft delete failed")
+		return apperror.NewInternal("failed to delete account", err)
 	}
 
-	// 4. Invalidate cache (write-through)
 	if s.cache != nil {
 		go func() {
 			ctx := context.Background()
@@ -301,38 +250,32 @@ func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 		}()
 	}
 
-	logging.Ctx(ctx).Infow("account_deleted_successfully",
-		"account_id", id,
-	)
+	span.SetStatus(codes.Ok, "account deleted")
 	return nil
 }
 
-// UpdateAccountBalance demonstrates distributed locking for balance updates
 func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, amount int64) error {
+	ctx, span := telemetry.Tracer.Start(ctx, "accountService.UpdateAccountBalance")
+	defer span.End()
+	span.SetAttributes(telemetry.ServiceAttrs("UpdateAccountBalance", "account", "balance")...)
+	span.SetAttributes(attribute.String("account.id", accountID))
+
 	if s.cache == nil {
-		logging.Ctx(ctx).Errorw("redis_client_not_configured",
-			"account_id", accountID,
-		)
-		return fmt.Errorf("redis client not configured")
+		span.SetStatus(codes.Error, "redis not configured")
+		return apperror.NewUnavailable("redis client not configured")
 	}
 
-	// Acquire distributed lock (30 second TTL)
 	lockAcquired, err := s.cache.AcquireLock(ctx, accountID, 30*time.Second)
 	if err != nil {
-		logging.Ctx(ctx).Errorw("failed_to_acquire_lock",
-			"account_id", accountID,
-			"error", err,
-		)
-		return fmt.Errorf("failed to acquire lock: %w", err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "lock acquisition failed")
+		return apperror.NewInternal("failed to acquire lock", err)
 	}
 	if !lockAcquired {
-		logging.Ctx(ctx).Warnw("account_locked_by_another_process",
-			"account_id", accountID,
-		)
-		return fmt.Errorf("account is currently being modified by another process")
+		span.SetStatus(codes.Error, "lock contention")
+		return apperror.NewConflict("account is currently being modified by another process")
 	}
 
-	// Ensure lock is released
 	defer func() {
 		go func() {
 			ctx := context.Background()
@@ -340,31 +283,19 @@ func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, am
 		}()
 	}()
 
-	// Get current account
 	account, err := s.repo.GetByID(ctx, accountID)
 	if err != nil {
-		logging.Ctx(ctx).Errorw("failed_to_fetch_account_for_balance_update",
-			"account_id", accountID,
-			"error", err,
-		)
-		return err
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "account fetch failed")
+		return apperror.NewNotFound("account not found")
 	}
 
-	// Update balance
 	newBalance := account.AvailableBalance + amount
 	if newBalance < -account.OverdraftLimit {
-		logging.Ctx(ctx).Warnw("insufficient_balance_for_operation",
-			"account_id", accountID,
-			"current_balance", account.AvailableBalance,
-			"requested_amount", amount,
-			"resulting_balance", newBalance,
-			"overdraft_limit", account.OverdraftLimit,
-		)
-		return fmt.Errorf("insufficient funds: balance would be %d, overdraft limit %d", newBalance, account.OverdraftLimit)
+		span.SetStatus(codes.Error, "insufficient funds")
+		return apperror.NewBadRequest(fmt.Sprintf("insufficient funds: balance would be %d, overdraft limit %d", newBalance, account.OverdraftLimit))
 	}
 
-	// In a real implementation, this would be done in a transaction
-	// For demo purposes, we'll just update the cache
 	if s.cache != nil {
 		go func() {
 			ctx := context.Background()
@@ -372,11 +303,6 @@ func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, am
 		}()
 	}
 
-	logging.Ctx(ctx).Infow("account_balance_updated",
-		"account_id", accountID,
-		"previous_balance", account.AvailableBalance,
-		"amount_adjusted", amount,
-		"new_balance", newBalance,
-	)
+	span.SetStatus(codes.Ok, "balance updated")
 	return nil
 }

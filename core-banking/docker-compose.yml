@@ -64,7 +64,7 @@ services:
     restart: unless-stopped
 
   tempo:
-    image: grafana/tempo:2.2.0
+    image: grafana/tempo:2.9.0
     container_name: core_banking_tempo
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
@@ -76,14 +76,14 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:10.1.0
+    image: grafana/grafana:latest
     container_name: core_banking_grafana
     volumes:
       - ./observability/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
-    environment:
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    # environment:
+    #   - GF_AUTH_ANONYMOUS_ENABLED=true
+    #   - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    #   - GF_AUTH_DISABLE_LOGIN_FORM=true
     ports:
       - "${GRAFANA_PORT}:3000"
     depends_on:
