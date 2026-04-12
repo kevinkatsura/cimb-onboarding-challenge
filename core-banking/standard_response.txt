@@ -1,0 +1,84 @@
+
+Komponen	Tipe Data	Length	Keterangan
+responseCode	String	7	response code = HTTP status code + service code + case code
+responseMessage	String	150	
+
+Intrabank transfer service code = 17
+Interbank transfer service code = 18
+Transfer status inquiry service code = 36
+
+Daftar Response Code
+Category	HTTP Code	Service Code	Case Code	Response Message	Description
+Success	200	any	00	Successful	Successful
+Success	202	any	00	Request In Progress	Transaction still on process
+System	400	any	00	Bad Request	General request failed error, including message parsing failed.
+Message	400	any	01	Invalid Field Format {field name}	Invalid format
+Message	400	any	02	Invalid Mandatory Field {field name}	Missing or invalid format on mandatory field
+System	401	any	00	Unauthorized. [reason]	General unauthorized error (No Interface Def, API is Invalid, Oauth Failed, Verify Client Secret Fail, Client Forbidden Access API, Unknown Client, Key not Found)
+System	401	any	01	Invalid Token (B2B)	Token found in request is invalid (Access Token Not Exist, Access Token Expiry)
+System	401	any	02	Invalid Customer Token	Token found in request is invalid (Access Token Not Exist, Access Token Expiry)
+System	401	any	03	Token Not Found (B2B)	Token not found in the system. This occurs on any API that requires token as input parameter
+System	401	any	04	Customer Token Not Found	Token not found in the system. This occurs on any API that requires token as input parameter
+Business	403	any	00	Transaction Expired	Transaction expired
+System	403	any	01	Feature Not Allowed [Reason]	This merchant is not allowed to call Direct Debit APIs
+Business	403	any	02	Exceeds Transaction Amount Limit	Exceeds Transaction Amount Limit
+Business	403	any	03	Suspected Fraud	Suspected Fraud
+Business	403	any	04	Activity Count Limit Exceeded	Too many request, Exceeds Transaction Frequency Limit
+Business	403	any	05	Do Not Honor	Account or User status is abnormal
+System	403	any	06	Feature Not Allowed At This Time. [reason]	Cut off In Progress
+Business	403	any	07	Card Blocked	The payment card is blocked
+Business	403	any	08	Card Expired	The payment card is expired
+Business	403	any	09	Dormant Account	The account is dormant
+Business	403	any	10	Need To Set Token Limit	Need to set token limit
+System	403	any	11	OTP Blocked	OTP has been blocked
+System	403	any	12	OTP Lifetime Expired	OTP has been expired
+System	403	any	13	OTP Sent To Cardholer	initiates request OTP to the issuer
+Business	403	any	14	Insufficient Funds	Insufficient Funds
+Business	403	any	15	Transaction Not Permitted.[reason]	Transaction Not Permitted
+Business	403	any	16	Suspend Transaction	Suspend Transaction
+Business	403	any	17	Token Limit Exceeded	Purchase amount exceeds the token limit set prior
+Business	403	any	18	Inactive Card/Account/Customer	Indicates inactive account
+Business	403	any	19	Merchant Blacklisted	Merchant is suspended from calling any APIs
+Business	403	any	20	Merchant Limit Exceed	Merchant aggregated purchase amount on that day exceeds the agreed limit
+Business	403	any	21	Set Limit Not Allowed	Set limit not allowed on particular token
+Business	403	any	22	Token Limit Invalid	The token limit desired by the merchant is not within the agreed range between the merchant and the Issuer
+Business	403	any	23	Account Limit Exceed	Account aggregated purchase amount on that day exceeds the agreed limit
+Business	404	any	00	Invalid Transaction Status	Invalid transaction status
+Business	404	any	01	Transaction Not Found	Transaction not found
+System	404	any	02	Invalid Routing	Invalid Routing
+System	404	any	03	Bank Not Supported By Switch	Bank not supported by switch
+Business	404	any	04	Transaction Cancelled	Transaction is cancelled by customer
+Business	404	any	05	Merchant Is Not Registered For Card Registration Services	Merchant is not registered for Card Registration services
+System	404	any	06	Need To Request OTP	Need to request OTP
+System	404	any	07	Journey Not Found	The journeyId cannot be found in the system
+Business	404	any	08	Invalid Merchant	Merchant does not exist or status abnormal
+Business	404	any	09	No Issuer	No issuer
+System	404	any	10	Invalid API Transition	Invalid API transition within a journey
+Business	404	any	11	Invalid Card/Account/Customer [info]/Virtual Account	Card information may be invalid, or the card account may be blacklisted, or Virtual Account number maybe invalid.
+Business	404	any	12	Invalid Bill/Virtual Account [Reason]	The bill is blocked/ suspended/not found.
+Virtual account is suspend/not found.
+Business	404	any	13	Invalid Amount	The amount doesn't match with what supposed to
+Business	404	any	14	Paid Bill	The bill has been paid
+System	404	any	15	Invalid OTP	OTP is incorrect
+Business	404	any	16	Partner Not Found	Partner number can't be found
+Business	404	any	17	Invalid Terminal	Terminal does not exist in the system
+Business	404	any	18	Inconsistent Request	Inconsistent request parameter found for the same partner reference number/transaction id
+It can be considered as failed in transfer debit, but it should be considered as success in transfer credit.
+Considered as success:
+- Transfer credit = (i) Intrabank transfer; (ii) Interbank transfer; (iii) RTGS transfer; (iv) SKNBI transfer;
+- Virtual account = (i) Payment VA; (ii) Payment to VA;
+- Transfer debit = (i) Refund payment; (ii) Void;
+Considered as failed:
+- Transfer credit = (i) Transfer to OTC;
+- Transfer debit = (i) Direct debit payment; (ii) QR CPM payment; (iii) Auth payment; (iv) Capture;
+Business	404	any	19	Invalid Bill/Virtual Account	The bill is expired.
+Virtual account is expired.
+System	405	any	00	Requested Function Is Not Supported	Requested function is not supported
+Business	405	any	01	Requested Opearation Is Not Allowed	Requested operation to cancel/refund transaction Is not allowed at this time.
+System	409	any	00	Conflict	Cannot use same X-EXTERNAL-ID in same day
+System	409	any	01	Duplicate partnerReferenceNo	Transaction has previously been processed indicates the same partnerReferenceNo already success
+System	429	any	00	Too Many Requests	Maximum transaction limit exceeded
+System	500	any	00	General Error	General Error
+System	500	Any	01	Internal Server Error	Unknown Internal Server Failure, Please retry the process again
+System	500	Any	02	External Server Error	Backend system failure, etc
+System	504	any	00	Timeout	timeout from the issuer

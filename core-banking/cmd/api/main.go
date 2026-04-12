@@ -8,14 +8,12 @@ package main
 import (
 	"context"
 	"core-banking/config"
-	accountHandler "core-banking/internal/handler/account"
-	txHandler "core-banking/internal/handler/transaction"
-	"core-banking/internal/repository"
+	account "core-banking/internal/account"
 	"core-banking/internal/server"
-	svc "core-banking/internal/service"
-	accountSvc "core-banking/internal/service/account"
-	transactionSvc "core-banking/internal/service/transaction"
+	"core-banking/internal/transaction"
+	"core-banking/pkg/database"
 	"core-banking/pkg/idgen"
+	"core-banking/pkg/lock"
 	"core-banking/pkg/logging"
 	"core-banking/pkg/telemetry"
 	"net/http"
@@ -47,24 +45,25 @@ func main() {
 	redisCfg := config.LoadRedisConfig()
 
 	// ---- DB Connection ----
-	db := repository.NewPostgres(cfg)
+	db := database.NewPostgres(cfg)
 	defer db.Close()
 
 	// ---- Redis Connection ----
-	redisClient := repository.NewRedis(redisCfg)
-	defer repository.CloseRedis(redisClient)
+	redisClient := database.NewRedis(redisCfg)
+	defer database.CloseRedis(redisClient)
 
 	// ---- Dependency Injection ----
-	lock := svc.NewAccountLockManager()
+	lockManager := lock.NewAccountLockManager()
 
-	txRepo := repository.NewTransactionRepository(db)
-	txService := transactionSvc.NewService(txRepo, lock)
-	txH := txHandler.NewHandler(txService)
+	txRepo := transaction.NewRepository(db)
+	auditSvc := transaction.NewAuditService(txRepo)
+	txService := transaction.NewService(txRepo, lockManager, auditSvc)
+	txH := transaction.NewHandler(txService)
 
-	accountRepo := repository.NewAccountRepository(db)
-	accountService := accountSvc.NewService(accountRepo, &idgen.RandomAccountNumberGenerator{})
+	accountRepo := account.NewRepository(db)
+	accountService := account.NewService(accountRepo, &idgen.RandomAccountNumberGenerator{})
 	accountService.SetRedisClient(redisClient)
-	accountH := accountHandler.NewHandler(accountService)
+	accountH := account.NewHandler(accountService)
 
 	// ---- HTTP Server ----
 	handler := server.NewRouter(accountH, txH)

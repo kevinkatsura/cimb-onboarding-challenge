@@ -38,7 +38,10 @@ func (s *Seeder) Seed(ctx context.Context) error {
 	if err := InsertTransactions(tx, data.Transactions); err != nil {
 		return err
 	}
-	if err := InsertJournalEntries(tx, data.Journals); err != nil {
+	if err := InsertTransferDetails(tx, data.TransferDetails); err != nil {
+		return err
+	}
+	if err := InsertJournals(tx, data.Journals); err != nil {
 		return err
 	}
 	if err := InsertLedgerEntries(tx, data.Ledgers); err != nil {

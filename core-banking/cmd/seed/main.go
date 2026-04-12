@@ -4,7 +4,7 @@ import (
 	"context"
 	"core-banking/config"
 	"core-banking/internal/database/seeder"
-	"core-banking/internal/repository"
+	"core-banking/pkg/database"
 	"core-banking/pkg/logging"
 )
 
@@ -12,7 +12,7 @@ func main() {
 	logging.InitLogger()
 
 	cfg := config.LoadConfig()
-	db := repository.NewPostgres(cfg)
+	db := database.NewPostgres(cfg)
 	defer db.Close()
 
 	s := seeder.New(db)

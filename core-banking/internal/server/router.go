@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	accountHandler "core-banking/internal/handler/account"
-	txHandler "core-banking/internal/handler/transaction"
+	account "core-banking/internal/account"
+	transaction "core-banking/internal/transaction"
 	"core-banking/pkg/middleware"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -12,7 +12,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
-func NewRouter(accountH *accountHandler.Handler, txH *txHandler.Handler) http.Handler {
+func NewRouter(accountH *account.Handler, txH *transaction.Handler) http.Handler {
 	mux := http.NewServeMux()
 
 	// ---- Swagger ----
@@ -22,8 +22,10 @@ func NewRouter(accountH *accountHandler.Handler, txH *txHandler.Handler) http.Ha
 	mux.Handle("GET /metrics", promhttp.Handler())
 
 	// ---- Transaction Endpoints ----
-	mux.Handle("POST /v1/transfer", otelhttp.NewHandler(http.HandlerFunc(txH.Transfer), "TransactionHandler.Transfer"))
-	mux.Handle("POST /v2/transfer", otelhttp.NewHandler(http.HandlerFunc(txH.TransferWithLock), "TransactionHandler.TransferWithLock"))
+	mux.Handle("POST /v1.0/transfer-intrabank", middleware.SNAP(otelhttp.NewHandler(http.HandlerFunc(txH.Transfer), "TransactionHandler.Transfer")))
+	mux.Handle("POST /v1.0/transfer-intrabank-locked", middleware.SNAP(otelhttp.NewHandler(http.HandlerFunc(txH.TransferWithLock), "TransactionHandler.TransferWithLock")))
+	mux.Handle("POST /v1.0/transfer/status", middleware.SNAP(otelhttp.NewHandler(http.HandlerFunc(txH.TransferStatusInquiry), "TransactionHandler.TransferStatusInquiry")))
+
 	mux.Handle("GET /transactions", otelhttp.NewHandler(http.HandlerFunc(txH.ListAll), "TransactionHandler.ListAll"))
 	mux.Handle("GET /accounts/{id}/transactions", otelhttp.NewHandler(http.HandlerFunc(txH.ListByAccount), "TransactionHandler.ListByAccount"))
 

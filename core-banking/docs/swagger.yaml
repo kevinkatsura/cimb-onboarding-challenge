@@ -1,6 +1,6 @@
 basePath: /
 definitions:
-  domain.Account:
+  account.Account:
     properties:
       account_number:
         type: string
@@ -31,7 +31,7 @@ definitions:
       updated_at:
         type: string
     type: object
-  dto.CreateAccountRequest:
+  account.CreateAccountRequest:
     properties:
       account_type:
         type: string
@@ -42,9 +42,149 @@ definitions:
       overdraft_limit:
         type: integer
     type: object
-  dto.TransactionHistoryResponse:
+  account.ErrorResponse:
     properties:
-      account_id:
+      responseCode:
+        type: string
+      responseMessage:
+        type: string
+    type: object
+  account.ResponseSuccessAccount:
+    properties:
+      account_number:
+        type: string
+      id:
+        type: string
+      responseCode:
+        type: string
+      responseMessage:
+        type: string
+    type: object
+  account.ResponseSuccessAccountList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/account.Account'
+        type: array
+      meta:
+        additionalProperties: true
+        type: object
+      responseCode:
+        type: string
+      responseMessage:
+        type: string
+    type: object
+  account.ResponseSuccessString:
+    properties:
+      data:
+        type: string
+      responseCode:
+        type: string
+      responseMessage:
+        type: string
+    type: object
+  account.UpdateAccountStatusRequest:
+    properties:
+      status:
+        type: string
+    type: object
+  snap.SNAPAmount:
+    properties:
+      currency:
+        type: string
+      value:
+        description: e.g., "10000.00"
+        type: string
+    type: object
+  transaction.ErrorResponse:
+    properties:
+      responseCode:
+        type: string
+      responseMessage:
+        type: string
+    type: object
+  transaction.IntrabankTransferRequest:
+    properties:
+      additionalInfo: {}
+      amount:
+        $ref: '#/definitions/snap.SNAPAmount'
+      beneficiaryAccountNo:
+        type: string
+      customerReference:
+        type: string
+      feeType:
+        type: string
+      originatorInfos:
+        items:
+          $ref: '#/definitions/transaction.OriginatorInfo'
+        type: array
+      partnerReferenceNo:
+        type: string
+      remark:
+        type: string
+      sourceAccountNo:
+        type: string
+      transactionDate:
+        type: string
+    type: object
+  transaction.IntrabankTransferResponse:
+    properties:
+      additionalInfo: {}
+      amount:
+        $ref: '#/definitions/snap.SNAPAmount'
+      beneficiaryAccountNo:
+        type: string
+      beneficiaryBankCode:
+        type: string
+      customerReference:
+        type: string
+      originatorInfos:
+        items:
+          $ref: '#/definitions/transaction.OriginatorInfo'
+        type: array
+      partnerReferenceNo:
+        type: string
+      referenceNo:
+        type: string
+      responseCode:
+        type: string
+      responseMessage:
+        type: string
+      sourceAccountNo:
+        type: string
+      traceNo:
+        type: string
+      transactionDate:
+        type: string
+    type: object
+  transaction.OriginatorInfo:
+    properties:
+      originatorBankCode:
+        type: string
+      originatorCustomerName:
+        type: string
+      originatorCustomerNo:
+        type: string
+    type: object
+  transaction.ResponseSuccessTransactionList:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/transaction.TransactionHistoryResponse'
+        type: array
+      meta:
+        additionalProperties: true
+        type: object
+      responseCode:
+        type: string
+      responseMessage:
+        type: string
+    type: object
+  transaction.TransactionHistoryResponse:
+    properties:
+      accountId:
+        type: string
+      accountNumber:
         type: string
       amount:
         type: integer
@@ -60,13 +200,13 @@ definitions:
         type: string
       entry_type:
         type: string
-      external_reference:
-        type: string
       journal_type:
         type: string
       ledger_entry_id:
         type: string
-      reference_id:
+      partnerReferenceNo:
+        type: string
+      referenceNo:
         type: string
       status:
         type: string
@@ -75,58 +215,35 @@ definitions:
       transaction_type:
         type: string
     type: object
-  dto.TransferRequest:
+  transaction.TransferStatusInquiryRequest:
+    properties:
+      originalPartnerReferenceNo:
+        type: string
+      originalReferenceNo:
+        type: string
+      serviceCode:
+        type: string
+    type: object
+  transaction.TransferStatusInquiryResponse:
     properties:
       amount:
-        type: integer
-      currency:
+        $ref: '#/definitions/snap.SNAPAmount'
+      latestTransactionStatus:
         type: string
-      from_account:
+      originalPartnerReferenceNo:
         type: string
-      reference_id:
+      originalReferenceNo:
         type: string
-      to_account:
+      referenceNumber:
         type: string
-    type: object
-  dto.TransferResponse:
-    properties:
-      amount:
-        type: integer
-      current_balance:
-        description: Failure fields
-        type: integer
-      destination_account:
+      responseCode:
         type: string
-      destination_balance_after:
-        type: integer
-      message:
+      responseMessage:
         type: string
-      source_account:
+      serviceCode:
         type: string
-      source_balance_after:
-        description: Success fields
-        type: integer
-      status:
+      transactionStatusDesc:
         type: string
-      transaction_id:
-        type: string
-    type: object
-  dto.UpdateAccountStatusRequest:
-    properties:
-      status:
-        type: string
-    type: object
-  response.APIResponse:
-    properties:
-      data: {}
-      error: {}
-      message:
-        type: string
-      meta:
-        additionalProperties: true
-        type: object
-      success:
-        type: boolean
     type: object
 info:
   contact: {}
@@ -160,25 +277,11 @@ paths:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/domain.Account'
-                  type: array
-                meta:
-                  type: object
-              type: object
+            $ref: '#/definitions/account.ResponseSuccessAccountList'
         "400":
           description: Bad Request
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/account.ErrorResponse'
       summary: List Accounts
       tags:
       - accounts
@@ -192,37 +295,22 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/dto.CreateAccountRequest'
+          $ref: '#/definitions/account.CreateAccountRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                data:
-                  $ref: '#/definitions/domain.Account'
-              type: object
+            $ref: '#/definitions/account.ResponseSuccessAccount'
         "400":
           description: Bad Request
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/account.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/account.ErrorResponse'
       summary: Create Account
       tags:
       - accounts
@@ -241,21 +329,11 @@ paths:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                data:
-                  type: string
-              type: object
+            $ref: '#/definitions/account.ResponseSuccessString'
         "400":
           description: Bad Request
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/account.ErrorResponse'
       summary: Delete Account
       tags:
       - accounts
@@ -273,21 +351,11 @@ paths:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                data:
-                  $ref: '#/definitions/domain.Account'
-              type: object
+            $ref: '#/definitions/account.ResponseSuccessAccount'
         "404":
           description: Not Found
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/account.ErrorResponse'
       summary: Get Account by ID
       tags:
       - accounts
@@ -306,37 +374,22 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/dto.UpdateAccountStatusRequest'
+          $ref: '#/definitions/account.UpdateAccountStatusRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                data:
-                  type: string
-              type: object
+            $ref: '#/definitions/account.ResponseSuccessString'
         "400":
           description: Bad Request
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/account.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/account.ErrorResponse'
       summary: Update Account Status
       tags:
       - accounts
@@ -367,25 +420,11 @@ paths:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/dto.TransactionHistoryResponse'
-                  type: array
-                meta:
-                  type: object
-              type: object
+            $ref: '#/definitions/transaction.ResponseSuccessTransactionList'
         "400":
           description: Bad Request
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/transaction.ErrorResponse'
       summary: List Transactions (By Account)
       tags:
       - transactions
@@ -407,117 +446,176 @@ paths:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/dto.TransactionHistoryResponse'
-                  type: array
-                meta:
-                  type: object
-              type: object
+            $ref: '#/definitions/transaction.ResponseSuccessTransactionList'
         "400":
           description: Bad Request
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/transaction.ErrorResponse'
       summary: List All Transactions
       tags:
       - transactions
-  /v1/transfer:
+  /v1.0/transfer-intrabank:
     post:
       consumes:
       - application/json
       description: Safely processes an inter-account fund transfer linearly.
       parameters:
+      - default: PARTNER001
+        description: Partner ID provided by the bank
+        in: header
+        name: X-PARTNER-ID
+        required: true
+        type: string
+      - default: "2026-04-12T18:00:00Z"
+        description: ISO-8601 Timestamp
+        in: header
+        name: X-TIMESTAMP
+        required: true
+        type: string
+      - default: valid-signature-for-testing
+        description: HMAC-SHA256 Signature
+        in: header
+        name: X-SIGNATURE
+        required: true
+        type: string
+      - default: "1234567890"
+        description: Random unique ID representing the request
+        in: header
+        name: X-EXTERNAL-ID
+        required: true
+        type: string
       - description: Transfer Payload
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/dto.TransferRequest'
+          $ref: '#/definitions/transaction.IntrabankTransferRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.TransferResponse'
-              type: object
+            $ref: '#/definitions/transaction.IntrabankTransferResponse'
         "400":
           description: Bad Request
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/transaction.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/transaction.ErrorResponse'
       summary: Account Transfer (Optimistic)
       tags:
       - transactions
-  /v2/transfer:
+  /v1.0/transfer-intrabank-locked:
     post:
       consumes:
       - application/json
       description: Safely processes a transfer explicitly restricting concurrency
         on the accounts.
       parameters:
+      - default: PARTNER001
+        description: Partner ID provided by the bank
+        in: header
+        name: X-PARTNER-ID
+        required: true
+        type: string
+      - default: "2026-04-12T18:00:00Z"
+        description: ISO-8601 Timestamp
+        in: header
+        name: X-TIMESTAMP
+        required: true
+        type: string
+      - default: valid-signature-for-testing
+        description: HMAC-SHA256 Signature
+        in: header
+        name: X-SIGNATURE
+        required: true
+        type: string
+      - default: "1234567890"
+        description: Random unique ID representing the request
+        in: header
+        name: X-EXTERNAL-ID
+        required: true
+        type: string
       - description: Transfer Payload
         in: body
         name: request
         required: true
         schema:
-          $ref: '#/definitions/dto.TransferRequest'
+          $ref: '#/definitions/transaction.IntrabankTransferRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                data:
-                  $ref: '#/definitions/dto.TransferResponse'
-              type: object
+            $ref: '#/definitions/transaction.IntrabankTransferResponse'
         "400":
           description: Bad Request
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/transaction.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
-            allOf:
-            - $ref: '#/definitions/response.APIResponse'
-            - properties:
-                error:
-                  type: string
-              type: object
+            $ref: '#/definitions/transaction.ErrorResponse'
       summary: Account Transfer (Pessimistic Redis Lock)
+      tags:
+      - transactions
+  /v1.0/transfer/status:
+    post:
+      consumes:
+      - application/json
+      description: Fetch transaction status conforming to SNAP BI using Service Code
+        36.
+      parameters:
+      - default: PARTNER001
+        description: Partner ID provided by the bank
+        in: header
+        name: X-PARTNER-ID
+        required: true
+        type: string
+      - default: "2026-04-12T18:00:00Z"
+        description: ISO-8601 Timestamp
+        in: header
+        name: X-TIMESTAMP
+        required: true
+        type: string
+      - default: valid-signature-for-testing
+        description: HMAC-SHA256 Signature
+        in: header
+        name: X-SIGNATURE
+        required: true
+        type: string
+      - default: "1234567890"
+        description: Random unique ID representing the request
+        in: header
+        name: X-EXTERNAL-ID
+        required: true
+        type: string
+      - description: Inquiry Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/transaction.TransferStatusInquiryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transaction.TransferStatusInquiryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/transaction.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/transaction.ErrorResponse'
+      summary: Transfer Status Inquiry
       tags:
       - transactions
 swagger: "2.0"

@@ -1,8 +1,8 @@
-package cache
+package account
 
 import (
 	"context"
-	"core-banking/internal/account"
+
 	"core-banking/pkg/telemetry"
 	"encoding/json"
 	"fmt"
@@ -34,7 +34,7 @@ const (
 )
 
 // SetAccount caches an account with TTL
-func (c *RedisCache) SetAccount(ctx context.Context, account *account.Account) error {
+func (c *RedisCache) SetAccount(ctx context.Context, account *Account) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "cache.SetAccount")
 	defer span.End()
 
@@ -59,7 +59,7 @@ func (c *RedisCache) SetAccount(ctx context.Context, account *account.Account) e
 }
 
 // GetAccount retrieves cached account
-func (c *RedisCache) GetAccount(ctx context.Context, id string) (*account.Account, error) {
+func (c *RedisCache) GetAccount(ctx context.Context, id string) (*Account, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "cache.GetAccount")
 	defer span.End()
 
@@ -79,7 +79,7 @@ func (c *RedisCache) GetAccount(ctx context.Context, id string) (*account.Accoun
 
 	span.SetAttributes(telemetry.CacheAttrs("redis", "GET", key, true, int(c.ttl.Seconds()))...)
 
-	var account account.Account
+	var account Account
 	if err := json.Unmarshal([]byte(data), &account); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "unmarshal failed")
@@ -207,7 +207,7 @@ func (c *RedisCache) ReleaseLock(ctx context.Context, accountID string) error {
 }
 
 // SetAccountList caches paginated account lists
-func (c *RedisCache) SetAccountList(ctx context.Context, cacheKey string, accounts []account.Account, total int) error {
+func (c *RedisCache) SetAccountList(ctx context.Context, cacheKey string, accounts []Account, total int) error {
 	ctx, span := telemetry.Tracer.Start(ctx, "cache.SetAccountList")
 	defer span.End()
 
@@ -215,8 +215,8 @@ func (c *RedisCache) SetAccountList(ctx context.Context, cacheKey string, accoun
 	span.SetAttributes(telemetry.CacheAttrsNoHit("redis", "SET", key, int(c.ttl.Seconds()))...)
 
 	data := struct {
-		Accounts []account.Account `json:"accounts"`
-		Total    int               `json:"total"`
+		Accounts []Account `json:"accounts"`
+		Total    int       `json:"total"`
 	}{
 		Accounts: accounts,
 		Total:    total,
@@ -240,7 +240,7 @@ func (c *RedisCache) SetAccountList(ctx context.Context, cacheKey string, accoun
 }
 
 // GetAccountList retrieves cached account list
-func (c *RedisCache) GetAccountList(ctx context.Context, cacheKey string) ([]account.Account, int, error) {
+func (c *RedisCache) GetAccountList(ctx context.Context, cacheKey string) ([]Account, int, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "cache.GetAccountList")
 	defer span.End()
 
@@ -261,8 +261,8 @@ func (c *RedisCache) GetAccountList(ctx context.Context, cacheKey string) ([]acc
 	span.SetAttributes(telemetry.CacheAttrs("redis", "GET", key, true, int(c.ttl.Seconds()))...)
 
 	var result struct {
-		Accounts []account.Account `json:"accounts"`
-		Total    int               `json:"total"`
+		Accounts []Account `json:"accounts"`
+		Total    int       `json:"total"`
 	}
 
 	if err := json.Unmarshal([]byte(data), &result); err != nil {

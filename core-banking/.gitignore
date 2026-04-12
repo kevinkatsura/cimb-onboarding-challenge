@@ -18,3 +18,13 @@ coverage.out
 
 # Go Workspaces
 vendor/
+
+# OS & IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Generated Mocks
+mocks/

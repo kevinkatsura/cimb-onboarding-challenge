@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS customers (
 
     -- Identity
     full_name TEXT NOT NULL,
-    data_of_birth DATE NOT NULL,
+    date_of_birth DATE NOT NULL,
     nationality CHAR(2) NOT NULL, -- ISO country code
 
     -- Contact
@@ -69,44 +69,67 @@ CREATE TABLE IF NOT EXISTS accounts (
     CONSTRAINT check_balance_non_negative CHECK(available_balance >= -overdraft_limit)
 );
 
--- Transactions (logical event)
+-- Transactions (logical business event)
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(), 
 
-    reference_id TEXT UNIQUE NOT NULL, -- idempotency key
-    external_reference TEXT, -- from external system
-
+    partner_reference_no TEXT UNIQUE NOT NULL, -- SNAP PartnerReferenceNo
+    reference_no TEXT, -- internal system reference generated after success
+    
     transaction_type VARCHAR(30) NOT NULL CHECK (transaction_type IN ('transfer', 'deposit', 'withdrawal', 'payment', 'fee', 'reversal')),
-
     status VARCHAR(20) NOT NULL CHECK (status IN ('pending', 'completed', 'failed', 'reversed')),
 
     amount BIGINT NOT NULL CHECK (amount > 0),
     currency CHAR(3) NOT NULL, 
 
-    initiated_by UUID REFERENCES customers(id),
-    
     description TEXT,
 
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMP
 );
 
--- Ledger (Journal Header)
-CREATE TABLE IF NOT EXISTS journal_entries (
+-- Transaction Metadata / Transfer Details (SNAP Compliance)
+CREATE TABLE IF NOT EXISTS transfer_details (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    transaction_id UUID UNIQUE NOT NULL REFERENCES transactions(id),
+
+    source_account_no TEXT NOT NULL,
+    beneficiary_account_no TEXT NOT NULL,
+    beneficiary_account_name TEXT,
+    beneficiary_address TEXT,
+    beneficiary_bank_code TEXT,
+    beneficiary_bank_name TEXT,
+    beneficiary_email TEXT,
+
+    customer_reference TEXT,
+    fee_type TEXT CHECK (fee_type IN ('OUR', 'BEN', 'SHA')),
+    transaction_date TIMESTAMP,
+    remark TEXT,
+    
+    originator_infos JSONB,
+    additional_info JSONB,
+
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Journals (Accounting Intent)
+CREATE TABLE IF NOT EXISTS journals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     transaction_id UUID NOT NULL REFERENCES transactions(id),
 
     journal_type VARCHAR(30) NOT NULL, -- transfer, fee, settlement
+    status VARCHAR(20) NOT NULL DEFAULT 'posted',
 
     posted_at TIMESTAMP NOT NULL DEFAULT NOW(),
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
--- Entries (actual money movement), Ledge lines (double entry core)
+-- Entries (actual money movement), Ledger lines (double entry core)
 CREATE TABLE IF NOT EXISTS ledger_entries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-    journal_id UUID NOT NULL REFERENCES journal_entries(id),
+    journal_id UUID NOT NULL REFERENCES journals(id),
     account_id UUID NOT NULL REFERENCES accounts(id),
 
     entry_type VARCHAR(10) NOT NULL CHECK (entry_type IN ('debit', 'credit')),
@@ -163,7 +186,9 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
     key TEXT UNIQUE NOT NULL,
     request_hash TEXT NOT NULL,
 
-    response JSONB,
+    response_code TEXT,
+    response_message TEXT,
+    response_body BYTEA,
 
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -180,21 +205,23 @@ CREATE TABLE IF NOT EXISTS fx_rates (
 );
 
 -- Ensure each transaction is balanced
-CREATE FUNCTION validate_transaction_balance(tx_id UUID) 
+CREATE OR REPLACE FUNCTION validate_transaction_balance(tx_id UUID) 
 RETURNS BOOLEAN AS $$
 DECLARE 
     total_debit BIGINT;
     total_credit BIGINT;
 BEGIN
-    SELECT COALESCE(SUM(amount), 0)
+    SELECT COALESCE(SUM(le.amount), 0)
     INTO total_debit
-    FROM ledger_entries
-    WHERE transaction_id = tx_id AND entry_type = 'debit';
+    FROM ledger_entries le
+    JOIN journals j ON le.journal_id = j.id
+    WHERE j.transaction_id = tx_id AND le.entry_type = 'debit';
 
-    SELECT COALESCE(SUM(amount), 0)
+    SELECT COALESCE(SUM(le.amount), 0)
     INTO total_credit
-    FROM ledger_entries
-    WHERE transaction_id = tx_id AND entry_type = 'credit';
+    FROM ledger_entries le
+    JOIN journals j ON le.journal_id = j.id
+    WHERE j.transaction_id = tx_id AND le.entry_type = 'credit';
 
     RETURN total_debit = total_credit;
 END;

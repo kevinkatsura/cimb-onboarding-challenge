@@ -2,7 +2,7 @@ package main
 
 import (
 	"core-banking/config"
-	"core-banking/internal/repository"
+	"core-banking/pkg/database"
 	"core-banking/pkg/logging"
 	"fmt"
 	"os"
@@ -20,10 +20,10 @@ func main() {
 
 	switch os.Args[1] {
 	case "up":
-		repository.EnsureDatabase(cfg)
-		repository.RunMigrateUp(cfg)
+		database.EnsureDatabase(cfg)
+		database.RunMigrateUp(cfg)
 	case "down":
-		repository.RunMigrateDown(cfg)
+		database.RunMigrateDown(cfg)
 	default:
 		fmt.Printf("Unknown command: %s\nUsage: core-banking-migrate [up|down]\n", os.Args[1])
 		os.Exit(1)
