@@ -11,4 +11,5 @@ type Interface interface {
 	UpdateStatus(ctx context.Context, id string, status string) error
 	DeleteAccount(ctx context.Context, id string) error
 	UpdateAccountBalance(ctx context.Context, accountID string, amount int64) error
+	RegisterAccount(ctx context.Context, req RegistrationAccountCreationRequest) (*Account, error)
 }

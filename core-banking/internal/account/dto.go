@@ -28,11 +28,43 @@ type CreateAccountRequest struct {
 	Currency    string `json:"currency"`
 }
 
+type RegistrationAccountCreationRequest struct {
+	PartnerReferenceNo string                   `json:"partnerReferenceNo" example:"2020102900000000000001"`
+	CustomerID         string                   `json:"customerId" example:"CUST001"`
+	CountryCode        string                   `json:"countryCode" example:"ID"`
+	DeviceInfo         *DeviceInfo              `json:"deviceInfo,omitempty"`
+	Name               string                   `json:"name" example:"John Doe"`
+	Email              string                   `json:"email" example:"john.doe@example.com"`
+	PhoneNo            string                   `json:"phoneNo" example:"628123456789"`
+	OnboardingPartner  string                   `json:"onboardingPartner" example:"PARTNER01"`
+	RedirectURL        string                   `json:"redirectUrl" example:"https://partner.com/callback"`
+	Scopes             string                   `json:"scopes" example:"read write"`
+	SeamlessData       string                   `json:"seamlessData" example:"encrypted_data"`
+	SeamlessSign       string                   `json:"seamlessSign" example:"signature_hash"`
+	State              string                   `json:"state" example:"active"`
+	Lang               string                   `json:"lang" example:"id-ID"`
+	Locale             string                   `json:"locale" example:"JKT"`
+	MerchantID         string                   `json:"merchantId" example:"MER001"`
+	SubMerchantID      string                   `json:"subMerchantId" example:"SUB001"`
+	TerminalType       string                   `json:"terminalType" example:"MOBILE"`
+	AdditionalInfo     *snap.SNAPAdditionalInfo `json:"additionalInfo,omitempty"`
+}
+
+type RegistrationAccountCreationResponse struct {
+	ReferenceNo        string                   `json:"referenceNo" example:"REF001"`
+	PartnerReferenceNo string                   `json:"partnerReferenceNo" example:"2020102900000000000001"`
+	AuthCode           string                   `json:"authCode,omitempty" example:"AUTH001"`
+	ApiKey             string                   `json:"apiKey,omitempty" example:"CUST001"`
+	AccountID          string                   `json:"accountId" example:"ACC001"`
+	State              string                   `json:"state,omitempty" example:"active"`
+	AdditionalInfo     *snap.SNAPAdditionalInfo `json:"additionalInfo,omitempty"`
+}
+
 type DeviceInfo struct {
-	OS           string `json:"os"`
-	OSVersion    string `json:"osVersion"`
-	Model        string `json:"model"`
-	Manufacturer string `json:"manufacturer"`
+	OS           string `json:"os" example:"Android"`
+	OSVersion    string `json:"osVersion" example:"13.0"`
+	Model        string `json:"model" example:"Pixel 7"`
+	Manufacturer string `json:"manufacturer" example:"Google"`
 }
 
 type UpdateAccountStatusRequest struct {

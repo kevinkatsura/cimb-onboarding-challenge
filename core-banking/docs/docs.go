@@ -323,6 +323,84 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1.0/registration-account-creation": {
+            "post": {
+                "description": "Creates a new customer profile and a default savings account. Service Code 06.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "accounts"
+                ],
+                "summary": "Register Account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "PARTNER001",
+                        "description": "Partner ID provided by the bank",
+                        "name": "X-PARTNER-ID",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "2026-04-12T18:00:00Z",
+                        "description": "ISO-8601 Timestamp",
+                        "name": "X-TIMESTAMP",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "valid-signature-for-testing",
+                        "description": "HMAC-SHA256 Signature",
+                        "name": "X-SIGNATURE",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "1234567890",
+                        "description": "Random unique ID representing the request",
+                        "name": "X-EXTERNAL-ID",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Registration Payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/account.RegistrationAccountCreationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/account.ResponseSuccessAccount"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/account.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/account.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1.0/transfer-intrabank": {
             "post": {
                 "description": "Safely processes an inter-account fund transfer linearly.",
@@ -565,12 +643,6 @@ const docTemplate = `{
                 "account_number": {
                     "type": "string"
                 },
-                "account_type": {
-                    "type": "string"
-                },
-                "available_balance": {
-                    "type": "integer"
-                },
                 "closed_at": {
                     "type": "string"
                 },
@@ -583,20 +655,14 @@ const docTemplate = `{
                 "customer_id": {
                     "type": "string"
                 },
-                "deleted_at": {
-                    "type": "string"
-                },
                 "id": {
                     "type": "string"
                 },
                 "opened_at": {
                     "type": "string"
                 },
-                "overdraft_limit": {
-                    "type": "integer"
-                },
-                "pending_balance": {
-                    "type": "integer"
+                "product_code": {
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -609,17 +675,90 @@ const docTemplate = `{
         "account.CreateAccountRequest": {
             "type": "object",
             "properties": {
-                "account_type": {
+                "additionalInfo": {
+                    "$ref": "#/definitions/snap.SNAPAdditionalInfo"
+                },
+                "countryCode": {
                     "type": "string"
                 },
                 "currency": {
                     "type": "string"
                 },
-                "customer_id": {
+                "customerId": {
                     "type": "string"
                 },
-                "overdraft_limit": {
-                    "type": "integer"
+                "deviceInfo": {
+                    "$ref": "#/definitions/account.DeviceInfo"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "lang": {
+                    "type": "string"
+                },
+                "locale": {
+                    "type": "string"
+                },
+                "merchantId": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "onboardingPartner": {
+                    "type": "string"
+                },
+                "partnerReferenceNo": {
+                    "type": "string"
+                },
+                "phoneNo": {
+                    "type": "string"
+                },
+                "product_code": {
+                    "description": "Core banking fields",
+                    "type": "string"
+                },
+                "redirectUrl": {
+                    "type": "string"
+                },
+                "scopes": {
+                    "type": "string"
+                },
+                "seamlessData": {
+                    "type": "string"
+                },
+                "seamlessSign": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "subMerchantId": {
+                    "type": "string"
+                },
+                "terminalType": {
+                    "type": "string"
+                }
+            }
+        },
+        "account.DeviceInfo": {
+            "type": "object",
+            "properties": {
+                "manufacturer": {
+                    "type": "string",
+                    "example": "Google"
+                },
+                "model": {
+                    "type": "string",
+                    "example": "Pixel 7"
+                },
+                "os": {
+                    "type": "string",
+                    "example": "Android"
+                },
+                "osVersion": {
+                    "type": "string",
+                    "example": "13.0"
                 }
             }
         },
@@ -634,6 +773,85 @@ const docTemplate = `{
                 }
             }
         },
+        "account.RegistrationAccountCreationRequest": {
+            "type": "object",
+            "properties": {
+                "additionalInfo": {
+                    "$ref": "#/definitions/snap.SNAPAdditionalInfo"
+                },
+                "countryCode": {
+                    "type": "string",
+                    "example": "ID"
+                },
+                "customerId": {
+                    "type": "string",
+                    "example": "CUST001"
+                },
+                "deviceInfo": {
+                    "$ref": "#/definitions/account.DeviceInfo"
+                },
+                "email": {
+                    "type": "string",
+                    "example": "john.doe@example.com"
+                },
+                "lang": {
+                    "type": "string",
+                    "example": "id-ID"
+                },
+                "locale": {
+                    "type": "string",
+                    "example": "Jakarta"
+                },
+                "merchantId": {
+                    "type": "string",
+                    "example": "MER001"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "John Doe"
+                },
+                "onboardingPartner": {
+                    "type": "string",
+                    "example": "PARTNER01"
+                },
+                "partnerReferenceNo": {
+                    "type": "string",
+                    "example": "2020102900000000000001"
+                },
+                "phoneNo": {
+                    "type": "string",
+                    "example": "628123456789"
+                },
+                "redirectUrl": {
+                    "type": "string",
+                    "example": "https://partner.com/callback"
+                },
+                "scopes": {
+                    "type": "string",
+                    "example": "read write"
+                },
+                "seamlessData": {
+                    "type": "string",
+                    "example": "encrypted_data"
+                },
+                "seamlessSign": {
+                    "type": "string",
+                    "example": "signature_hash"
+                },
+                "state": {
+                    "type": "string",
+                    "example": "active"
+                },
+                "subMerchantId": {
+                    "type": "string",
+                    "example": "SUB001"
+                },
+                "terminalType": {
+                    "type": "string",
+                    "example": "MOBILE"
+                }
+            }
+        },
         "account.ResponseSuccessAccount": {
             "type": "object",
             "properties": {
@@ -641,6 +859,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
+                    "type": "string"
+                },
+                "product_code": {
                     "type": "string"
                 },
                 "responseCode": {
@@ -690,6 +911,17 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "snap.SNAPAdditionalInfo": {
+            "type": "object",
+            "properties": {
+                "channel": {
+                    "type": "string"
+                },
+                "deviceId": {
                     "type": "string"
                 }
             }

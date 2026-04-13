@@ -53,6 +53,43 @@ func (s *Service) SetRedisClient(client *redis.Client) {
 	s.cache = NewRedisCache(client)
 }
 
+func (s *Service) RegisterAccount(ctx context.Context, req RegistrationAccountCreationRequest) (*Account, error) {
+	ctx, span := telemetry.Tracer.Start(ctx, "accountService.RegisterAccount")
+	defer span.End()
+	span.SetAttributes(telemetry.ServiceAttrs("RegisterAccount", "account", "onboarding")...)
+
+	// Default values for registration-based account creation
+	defaultProductCode := "savings"
+	defaultCurrency := "IDR"
+
+	// Map to internal CreateAccountRequest for reuse
+	internalReq := CreateAccountRequest{
+		PartnerReferenceNo: req.PartnerReferenceNo,
+		CustomerID:         req.CustomerID,
+		CountryCode:        req.CountryCode,
+		DeviceInfo:         req.DeviceInfo,
+		Name:               req.Name,
+		Email:              req.Email,
+		PhoneNo:            req.PhoneNo,
+		OnboardingPartner:  req.OnboardingPartner,
+		RedirectURL:        req.RedirectURL,
+		Scopes:             req.Scopes,
+		SeamlessData:       req.SeamlessData,
+		SeamlessSign:       req.SeamlessSign,
+		State:              req.State,
+		Lang:               req.Lang,
+		Locale:             req.Locale,
+		MerchantID:         req.MerchantID,
+		SubMerchantID:      req.SubMerchantID,
+		TerminalType:       req.TerminalType,
+		AdditionalInfo:     req.AdditionalInfo,
+		ProductCode:        defaultProductCode,
+		Currency:           defaultCurrency,
+	}
+
+	return s.CreateAccount(ctx, internalReq)
+}
+
 func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (*Account, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "accountService.CreateAccount")
 	defer span.End()
@@ -62,6 +99,10 @@ func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 	var err error
 
 	if req.CustomerID != "" {
+		if _, err := uuid.Parse(req.CustomerID); err != nil {
+			span.RecordError(err)
+			return nil, apperror.Wrap(apperror.ErrInvalidFieldFormat, "invalid field format", err)
+		}
 		customer, err = s.repo.GetCustomerByID(ctx, req.CustomerID)
 		if err != nil {
 			span.RecordError(err)

@@ -85,6 +85,56 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	response.WriteSuccess(ctx, w, snap.AccountServiceCode, acc, nil)
 }
 
+// Register creates a new customer and default account for registration flow.
+//
+//	@Summary		Register Account
+//	@Description	Creates a new customer profile and a default savings account. Service Code 06.
+//	@Tags			accounts
+//	@Accept			json
+//	@Produce		json
+//	@Param			X-PARTNER-ID	header		string								true	"Partner ID provided by the bank"			default(PARTNER001)
+//	@Param			X-TIMESTAMP		header		string								true	"ISO-8601 Timestamp"						default(2026-04-12T18:00:00Z)
+//	@Param			X-SIGNATURE		header		string								true	"HMAC-SHA256 Signature"					default(valid-signature-for-testing)
+//	@Param			X-EXTERNAL-ID	header		string								true	"Random unique ID representing the request"	default(1234567890)
+//	@Param			request			body		RegistrationAccountCreationRequest	true	"Registration Payload"
+//	@Success		200		{object}	ResponseSuccessAccount
+//	@Failure		400		{object}	ErrorResponse
+//	@Failure		500		{object}	ErrorResponse
+//	@Router			/v1.0/registration-account-creation [post]
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	var req RegistrationAccountCreationRequest
+	ctx := r.Context()
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(telemetry.HandlerAttrs(r, "POST /v1.0/registration-account-creation")...)
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.WriteError(ctx, w, snap.RegistrationAccountCreationServiceCode, "registration_invalid_body", apperror.Wrap(apperror.ErrInvalidFieldFormat, "Bad Request", err))
+		return
+	}
+
+	acc, err := h.service.RegisterAccount(ctx, req)
+	if err != nil {
+		response.WriteError(ctx, w, snap.RegistrationAccountCreationServiceCode, "registration_failed", err)
+		return
+	}
+
+	logging.Ctx(ctx).Infow("registration_completed",
+		"customer_id", req.CustomerID,
+		"account_number", acc.AccountNumber,
+	)
+
+	res := RegistrationAccountCreationResponse{
+		ReferenceNo:        acc.ID.String(),
+		PartnerReferenceNo: req.PartnerReferenceNo,
+		ApiKey:             req.CustomerID,
+		AccountID:          acc.AccountNumber,
+		State:              req.State,
+		AdditionalInfo:     req.AdditionalInfo,
+	}
+
+	response.WriteSuccess(ctx, w, snap.RegistrationAccountCreationServiceCode, res, nil)
+}
+
 // Get fetches a single bank account uniquely.
 //
 //	@Summary		Get Account by ID

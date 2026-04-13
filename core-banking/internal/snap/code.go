@@ -10,4 +10,6 @@ const (
 	InterbankBulkTransferNotificationServiceCode = "21"
 	TransferRTGSServiceCode                      = "22"
 	TransferStatusInquiryServiceCode             = "36"
+
+	RegistrationAccountCreationServiceCode = "06"
 )

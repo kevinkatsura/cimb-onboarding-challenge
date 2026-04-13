@@ -33,6 +33,7 @@ func NewRouter(accountH *account.Handler, txH *transaction.Handler) http.Handler
 	mux.Handle("GET /accounts", otelhttp.NewHandler(http.HandlerFunc(accountH.List), "AccountHandler.ListAccounts"))
 	mux.Handle("GET /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountH.Get), "AccountHandler.GetAccountByID"))
 	mux.Handle("POST /accounts", otelhttp.NewHandler(http.HandlerFunc(accountH.Create), "AccountHandler.CreateAccount"))
+	mux.Handle("POST /v1.0/registration-account-creation", middleware.SNAP(otelhttp.NewHandler(http.HandlerFunc(accountH.Register), "AccountHandler.Register")))
 	mux.Handle("PATCH /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountH.UpdateStatus), "AccountHandler.UpdateStatus"))
 	mux.Handle("DELETE /accounts/{id}", otelhttp.NewHandler(http.HandlerFunc(accountH.Delete), "AccountHandler.DeleteAccount"))
 
