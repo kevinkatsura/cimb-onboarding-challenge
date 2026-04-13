@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"go.opentelemetry.io/otel/trace"
 )
@@ -148,6 +149,113 @@ func (h *Handler) TransferStatusInquiry(w http.ResponseWriter, r *http.Request) 
 	}
 
 	response.WriteSuccess(ctx, w, snap.TransferStatusInquiryServiceCode, data, nil)
+}
+
+// ListHistory handles the SNAP v1.2 Transaction History List API.
+// @Summary Transaction History List (SNAP v1.2)
+// @Description Retrieves a paginated list of transaction history based on date range and cursor.
+// @Tags transactions
+// @Accept json
+// @Produce json
+// @Param X-PARTNER-ID header string true "Partner ID provided by the bank" default(PARTNER001)
+// @Param X-TIMESTAMP header string true "ISO-8601 Timestamp" default(2026-04-12T18:00:00Z)
+// @Param X-SIGNATURE header string true "HMAC-SHA256 Signature" default(valid-signature-for-testing)
+// @Param X-EXTERNAL-ID header string true "Random unique ID representing the request" default(1234567890)
+// @Param request body TransactionHistoryListRequest true "History Payload"
+// @Success 200 {object} TransactionHistoryListResponse
+// @Failure 400 {object} ErrorResponse
+// @Router /v1.0/transaction-history-list [post]
+func (h *Handler) ListHistory(w http.ResponseWriter, r *http.Request) {
+	var req TransactionHistoryListRequest
+	ctx := r.Context()
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(telemetry.HandlerAttrs(r, "POST /v1.0/transaction-history-list")...)
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.WriteError(ctx, w, snap.TransactionHistoryListServiceCode, "history_invalid_request", apperror.Wrap(apperror.ErrInvalidFieldFormat, "Invalid Field Format", err))
+		return
+	}
+
+	limit := 10
+	if req.PageSize != "" {
+		fmt.Sscanf(req.PageSize, "%d", &limit)
+	}
+
+	cursor, _ := pagination.DecodeCursor(req.Cursor)
+
+	filter := TransactionListFilter{
+		PartnerReferenceNo: &req.PartnerReferenceNo,
+		Limit:              limit,
+		Cursor:             cursor,
+		Direction:          "next", // SNAP v1.2 usually implies forward
+	}
+
+	if req.FromDateTime != "" {
+		t, err := time.Parse(time.RFC3339, req.FromDateTime)
+		if err == nil {
+			filter.FromDateTime = &t
+		}
+	}
+	if req.ToDateTime != "" {
+		t, err := time.Parse(time.RFC3339, req.ToDateTime)
+		if err == nil {
+			filter.ToDateTime = &t
+		}
+	}
+
+	data, _, nextCursor, _, err := h.service.List(ctx, filter)
+	if err != nil {
+		response.WriteError(ctx, w, snap.TransactionHistoryListServiceCode, "history_failed", err)
+		return
+	}
+
+	details := make([]HistoryDetailData, len(data))
+	for i, d := range data {
+		remark := ""
+		if d.Description != nil {
+			remark = *d.Description
+		}
+
+		dateTime := d.CreatedAt.Format(time.RFC3339)
+		if d.TransactionDate != nil {
+			dateTime = d.TransactionDate.Format(time.RFC3339)
+		}
+
+		details[i] = HistoryDetailData{
+			DateTime: dateTime,
+			Amount: snap.SNAPAmount{
+				Value:    fmt.Sprintf("%.2f", float64(d.Amount)/100.0),
+				Currency: d.Currency,
+			},
+			Remark: remark,
+			SourceOfFunds: []SourceOfFund{
+				{
+					Source: "BALANCE",
+					Amount: snap.SNAPAmount{
+						Value:    fmt.Sprintf("%.2f", float64(d.Amount)/100.0),
+						Currency: d.Currency,
+					},
+				},
+			},
+			Status: d.Status,
+			Type:   d.TransactionType,
+		}
+	}
+
+	res := TransactionHistoryListResponse{
+		ResponseCode:       "2001200",
+		ResponseMessage:    "Request has been processed successfully",
+		ReferenceNo:        fmt.Sprintf("%d", time.Now().UnixNano()), // Dummy reference
+		PartnerReferenceNo: req.PartnerReferenceNo,
+		DetailData:         details,
+	}
+
+	// Meta info for pagination if needed
+	meta := map[string]interface{}{
+		"nextCursor": nextCursor,
+	}
+
+	response.WriteSuccess(ctx, w, snap.TransactionHistoryListServiceCode, res, meta)
 }
 
 func (h *Handler) handleList(w http.ResponseWriter, r *http.Request, accountID *string, route string) {

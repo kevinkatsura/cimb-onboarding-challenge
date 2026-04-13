@@ -25,6 +25,7 @@ func NewRouter(accountH *account.Handler, txH *transaction.Handler) http.Handler
 	mux.Handle("POST /v1.0/transfer-intrabank", middleware.SNAP(otelhttp.NewHandler(http.HandlerFunc(txH.Transfer), "TransactionHandler.Transfer")))
 	mux.Handle("POST /v1.0/transfer-intrabank-locked", middleware.SNAP(otelhttp.NewHandler(http.HandlerFunc(txH.TransferWithLock), "TransactionHandler.TransferWithLock")))
 	mux.Handle("POST /v1.0/transfer/status", middleware.SNAP(otelhttp.NewHandler(http.HandlerFunc(txH.TransferStatusInquiry), "TransactionHandler.TransferStatusInquiry")))
+	mux.Handle("POST /v1.0/transaction-history-list", middleware.SNAP(otelhttp.NewHandler(http.HandlerFunc(txH.ListHistory), "TransactionHandler.ListHistory")))
 
 	mux.Handle("GET /transactions", otelhttp.NewHandler(http.HandlerFunc(txH.ListAll), "TransactionHandler.ListAll"))
 	mux.Handle("GET /accounts/{id}/transactions", otelhttp.NewHandler(http.HandlerFunc(txH.ListByAccount), "TransactionHandler.ListByAccount"))

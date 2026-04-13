@@ -75,6 +75,21 @@ func (r *TransactionRepository) List(ctx context.Context, f TransactionListFilte
 		args = append(args, *f.Status)
 		idx++
 	}
+	if f.PartnerReferenceNo != nil {
+		base += fmt.Sprintf(" AND tx.partner_reference_no = $%d", idx)
+		args = append(args, *f.PartnerReferenceNo)
+		idx++
+	}
+	if f.FromDateTime != nil {
+		base += fmt.Sprintf(" AND le.created_at >= $%d", idx)
+		args = append(args, *f.FromDateTime)
+		idx++
+	}
+	if f.ToDateTime != nil {
+		base += fmt.Sprintf(" AND le.created_at <= $%d", idx)
+		args = append(args, *f.ToDateTime)
+		idx++
+	}
 
 	order := "ORDER BY le.created_at DESC, le.id DESC"
 	if f.Cursor != nil {

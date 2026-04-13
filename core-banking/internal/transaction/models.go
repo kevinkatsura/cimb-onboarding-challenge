@@ -88,12 +88,15 @@ type IdempotencyKey struct {
 }
 
 type TransactionListFilter struct {
-	AccountID *string
-	Status    *string
-	Type      *string
-	Limit     int
-	Cursor    *pagination.Cursor
-	Direction string
+	AccountID          *string
+	PartnerReferenceNo *string
+	Status             *string
+	Type               *string
+	FromDateTime       *time.Time
+	ToDateTime         *time.Time
+	Limit              int
+	Cursor             *pagination.Cursor
+	Direction          string
 }
 
 type InsertTransactionParams struct {

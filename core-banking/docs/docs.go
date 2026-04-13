@@ -401,6 +401,78 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1.0/transaction-history-list": {
+            "post": {
+                "description": "Retrieves a paginated list of transaction history based on date range and cursor.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transactions"
+                ],
+                "summary": "Transaction History List (SNAP v1.2)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "PARTNER001",
+                        "description": "Partner ID provided by the bank",
+                        "name": "X-PARTNER-ID",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "2026-04-12T18:00:00Z",
+                        "description": "ISO-8601 Timestamp",
+                        "name": "X-TIMESTAMP",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "valid-signature-for-testing",
+                        "description": "HMAC-SHA256 Signature",
+                        "name": "X-SIGNATURE",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "1234567890",
+                        "description": "Random unique ID representing the request",
+                        "name": "X-EXTERNAL-ID",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "History Payload",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/transaction.TransactionHistoryListRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/transaction.TransactionHistoryListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/transaction.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1.0/transfer-intrabank": {
             "post": {
                 "description": "Safely processes an inter-account fund transfer linearly.",
@@ -800,7 +872,7 @@ const docTemplate = `{
                 },
                 "locale": {
                     "type": "string",
-                    "example": "Jakarta"
+                    "example": "JKT"
                 },
                 "merchantId": {
                     "type": "string",
@@ -949,6 +1021,39 @@ const docTemplate = `{
                 }
             }
         },
+        "transaction.HistoryDetailData": {
+            "type": "object",
+            "properties": {
+                "additionalInfo": {
+                    "$ref": "#/definitions/snap.SNAPAdditionalInfo"
+                },
+                "amount": {
+                    "$ref": "#/definitions/snap.SNAPAmount"
+                },
+                "dateTime": {
+                    "type": "string",
+                    "example": "2019-07-03T12:08:56+07:00"
+                },
+                "remark": {
+                    "type": "string",
+                    "example": "Payment to Warung Ikan Bakar"
+                },
+                "sourceOfFunds": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/transaction.SourceOfFund"
+                    }
+                },
+                "status": {
+                    "type": "string",
+                    "example": "SUCCESS"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "PAYMENT"
+                }
+            }
+        },
         "transaction.IntrabankTransferRequest": {
             "type": "object",
             "properties": {
@@ -1065,6 +1170,74 @@ const docTemplate = `{
                 }
             }
         },
+        "transaction.SourceOfFund": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "$ref": "#/definitions/snap.SNAPAmount"
+                },
+                "source": {
+                    "type": "string",
+                    "example": "BALANCE"
+                }
+            }
+        },
+        "transaction.TransactionHistoryListRequest": {
+            "type": "object",
+            "properties": {
+                "additionalInfo": {},
+                "cursor": {
+                    "type": "string",
+                    "example": "next_page_token"
+                },
+                "fromDateTime": {
+                    "type": "string",
+                    "example": "2019-07-03T12:08:56+07:00"
+                },
+                "pageSize": {
+                    "type": "string",
+                    "example": "10"
+                },
+                "partnerReferenceNo": {
+                    "type": "string",
+                    "example": "2020102900000000000001"
+                },
+                "toDateTime": {
+                    "type": "string",
+                    "example": "2019-07-03T12:08:56+07:00"
+                }
+            }
+        },
+        "transaction.TransactionHistoryListResponse": {
+            "type": "object",
+            "properties": {
+                "additionalInfo": {
+                    "$ref": "#/definitions/snap.SNAPAdditionalInfo"
+                },
+                "detailData": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/transaction.HistoryDetailData"
+                    }
+                },
+                "partnerReferenceNo": {
+                    "type": "string",
+                    "example": "2020102900000000000001"
+                },
+                "referenceNo": {
+                    "type": "string",
+                    "example": "2020102977770000000009"
+                },
+                "responseCode": {
+                    "type": "string",
+                    "example": "2001200"
+                },
+                "responseMessage": {
+                    "type": "string",
+                    "example": "Request has been processed successfully"
+                }
+            }
+        },
         "transaction.TransactionHistoryResponse": {
             "type": "object",
             "properties": {
@@ -1108,6 +1281,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "status": {
+                    "type": "string"
+                },
+                "transactionDate": {
                     "type": "string"
                 },
                 "transaction_id": {

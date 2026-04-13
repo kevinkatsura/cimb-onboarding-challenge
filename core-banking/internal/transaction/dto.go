@@ -88,11 +88,45 @@ type TransferResponse struct {
 	Message string `json:"message"`
 }
 
+type TransactionHistoryListRequest struct {
+	PartnerReferenceNo string      `json:"partnerReferenceNo" example:"2020102900000000000001"`
+	FromDateTime       string      `json:"fromDateTime" example:"2019-07-03T12:08:56+07:00"`
+	ToDateTime         string      `json:"toDateTime" example:"2019-07-03T12:08:56+07:00"`
+	PageSize           string      `json:"pageSize" example:"10"`
+	Cursor             string      `json:"cursor" example:"next_page_token"`
+	AdditionalInfo     interface{} `json:"additionalInfo,omitempty"`
+}
+
+type TransactionHistoryListResponse struct {
+	ResponseCode       string                   `json:"responseCode" example:"2001200"`
+	ResponseMessage    string                   `json:"responseMessage" example:"Request has been processed successfully"`
+	ReferenceNo        string                   `json:"referenceNo" example:"2020102977770000000009"`
+	PartnerReferenceNo string                   `json:"partnerReferenceNo" example:"2020102900000000000001"`
+	DetailData         []HistoryDetailData      `json:"detailData"`
+	AdditionalInfo     *snap.SNAPAdditionalInfo `json:"additionalInfo,omitempty"`
+}
+
+type HistoryDetailData struct {
+	DateTime       string                   `json:"dateTime" example:"2019-07-03T12:08:56+07:00"`
+	Amount         snap.SNAPAmount          `json:"amount"`
+	Remark         string                   `json:"remark" example:"Payment to Warung Ikan Bakar"`
+	SourceOfFunds  []SourceOfFund           `json:"sourceOfFunds"`
+	Status         string                   `json:"status" example:"SUCCESS"`
+	Type           string                   `json:"type" example:"PAYMENT"`
+	AdditionalInfo *snap.SNAPAdditionalInfo `json:"additionalInfo,omitempty"`
+}
+
+type SourceOfFund struct {
+	Source string          `json:"source" example:"BALANCE"`
+	Amount snap.SNAPAmount `json:"amount"`
+}
+
 type TransactionHistoryResponse struct {
-	LedgerEntryID      string  `db:"ledger_entry_id" json:"ledger_entry_id"`
-	TransactionID      string  `db:"transaction_id" json:"transaction_id"`
-	PartnerReferenceNo string  `db:"partner_reference_no" json:"partnerReferenceNo"`
-	ReferenceNo        *string `db:"reference_no" json:"referenceNo"`
+	LedgerEntryID      string     `db:"ledger_entry_id" json:"ledger_entry_id"`
+	TransactionID      string     `db:"transaction_id" json:"transaction_id"`
+	PartnerReferenceNo string     `db:"partner_reference_no" json:"partnerReferenceNo"`
+	ReferenceNo        *string    `db:"reference_no" json:"referenceNo"`
+	TransactionDate    *time.Time `db:"transaction_date" json:"transactionDate"`
 
 	AccountID     string `db:"account_id" json:"accountId"`
 	AccountNumber string `db:"account_number" json:"accountNumber"`

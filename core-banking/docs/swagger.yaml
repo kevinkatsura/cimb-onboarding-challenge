@@ -110,7 +110,7 @@ definitions:
         example: id-ID
         type: string
       locale:
-        example: Jakarta
+        example: JKT
         type: string
       merchantId:
         example: MER001
@@ -212,6 +212,29 @@ definitions:
       responseMessage:
         type: string
     type: object
+  transaction.HistoryDetailData:
+    properties:
+      additionalInfo:
+        $ref: '#/definitions/snap.SNAPAdditionalInfo'
+      amount:
+        $ref: '#/definitions/snap.SNAPAmount'
+      dateTime:
+        example: "2019-07-03T12:08:56+07:00"
+        type: string
+      remark:
+        example: Payment to Warung Ikan Bakar
+        type: string
+      sourceOfFunds:
+        items:
+          $ref: '#/definitions/transaction.SourceOfFund'
+        type: array
+      status:
+        example: SUCCESS
+        type: string
+      type:
+        example: PAYMENT
+        type: string
+    type: object
   transaction.IntrabankTransferRequest:
     properties:
       additionalInfo: {}
@@ -289,6 +312,54 @@ definitions:
       responseMessage:
         type: string
     type: object
+  transaction.SourceOfFund:
+    properties:
+      amount:
+        $ref: '#/definitions/snap.SNAPAmount'
+      source:
+        example: BALANCE
+        type: string
+    type: object
+  transaction.TransactionHistoryListRequest:
+    properties:
+      additionalInfo: {}
+      cursor:
+        example: next_page_token
+        type: string
+      fromDateTime:
+        example: "2019-07-03T12:08:56+07:00"
+        type: string
+      pageSize:
+        example: "10"
+        type: string
+      partnerReferenceNo:
+        example: "2020102900000000000001"
+        type: string
+      toDateTime:
+        example: "2019-07-03T12:08:56+07:00"
+        type: string
+    type: object
+  transaction.TransactionHistoryListResponse:
+    properties:
+      additionalInfo:
+        $ref: '#/definitions/snap.SNAPAdditionalInfo'
+      detailData:
+        items:
+          $ref: '#/definitions/transaction.HistoryDetailData'
+        type: array
+      partnerReferenceNo:
+        example: "2020102900000000000001"
+        type: string
+      referenceNo:
+        example: "2020102977770000000009"
+        type: string
+      responseCode:
+        example: "2001200"
+        type: string
+      responseMessage:
+        example: Request has been processed successfully
+        type: string
+    type: object
   transaction.TransactionHistoryResponse:
     properties:
       accountId:
@@ -322,6 +393,8 @@ definitions:
       transaction_id:
         type: string
       transaction_type:
+        type: string
+      transactionDate:
         type: string
     type: object
   transaction.TransferStatusInquiryRequest:
@@ -618,6 +691,57 @@ paths:
       summary: Register Account
       tags:
       - accounts
+  /v1.0/transaction-history-list:
+    post:
+      consumes:
+      - application/json
+      description: Retrieves a paginated list of transaction history based on date
+        range and cursor.
+      parameters:
+      - default: PARTNER001
+        description: Partner ID provided by the bank
+        in: header
+        name: X-PARTNER-ID
+        required: true
+        type: string
+      - default: "2026-04-12T18:00:00Z"
+        description: ISO-8601 Timestamp
+        in: header
+        name: X-TIMESTAMP
+        required: true
+        type: string
+      - default: valid-signature-for-testing
+        description: HMAC-SHA256 Signature
+        in: header
+        name: X-SIGNATURE
+        required: true
+        type: string
+      - default: "1234567890"
+        description: Random unique ID representing the request
+        in: header
+        name: X-EXTERNAL-ID
+        required: true
+        type: string
+      - description: History Payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/transaction.TransactionHistoryListRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/transaction.TransactionHistoryListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/transaction.ErrorResponse'
+      summary: Transaction History List (SNAP v1.2)
+      tags:
+      - transactions
   /v1.0/transfer-intrabank:
     post:
       consumes:
