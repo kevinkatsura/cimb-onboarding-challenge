@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -52,8 +53,7 @@ func (r *TransactionRepository) List(ctx context.Context, f TransactionListFilte
 	base := `
 		FROM ledger_entries le
 		JOIN accounts a ON a.id = le.account_id
-		JOIN journals j ON j.id = le.journal_id
-		JOIN transactions tx ON tx.id = j.transaction_id
+		JOIN transactions tx ON tx.id = le.transaction_id
 		WHERE 1=1`
 
 	args := []interface{}{}
@@ -103,12 +103,9 @@ func (r *TransactionRepository) List(ctx context.Context, f TransactionListFilte
 		a.account_number,
 		tx.transaction_type,
 		tx.status,
-		j.journal_type,
 		le.entry_type,
 		le.amount,
 		le.currency,
-		le.balance_after,
-		tx.description,
 		le.created_at,
 		tx.completed_at
 		` + base + `
@@ -178,24 +175,26 @@ func (r *TransactionRepository) GetSenderForUpdate(ctx context.Context, accountI
 
 	var result SenderAccount
 	err := r.ext.GetContext(ctx, &result,
-		`SELECT available_balance AS balance, customer_id, account_number
-		 FROM accounts
-		 WHERE id=$1
+		`SELECT a.id, b.available_balance AS balance, a.customer_id, a.account_number
+		 FROM accounts a
+		 JOIN account_balances b ON b.account_id = a.id
+		 WHERE a.id=$1
 		 FOR UPDATE`,
 		accountID,
 	)
 	return result, err
 }
 
-func (r *TransactionRepository) LockReceiver(ctx context.Context, accountID string) error {
+func (r *TransactionRepository) LockReceiver(ctx context.Context, accountID string) (uuid.UUID, error) {
 	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.LockReceiver")
 	defer span.End()
 
-	_, err := r.ext.ExecContext(ctx,
-		`SELECT 1 FROM accounts WHERE id=$1 FOR UPDATE`,
+	var id uuid.UUID
+	err := r.ext.GetContext(ctx, &id,
+		`SELECT id FROM accounts WHERE id=$1 FOR UPDATE`,
 		accountID,
 	)
-	return err
+	return id, err
 }
 
 func (r *TransactionRepository) InsertTransaction(ctx context.Context, p InsertTransactionParams) (string, error) {
@@ -206,7 +205,7 @@ func (r *TransactionRepository) InsertTransaction(ctx context.Context, p InsertT
 	err := r.ext.GetContext(ctx, &txID, `
 		INSERT INTO transactions (
 			partner_reference_no, transaction_type, status, amount, currency
-		) VALUES ($1, 'transfer', 'pending', $2, $3)
+		) VALUES ($1, 'transfer', 'initiated', $2, $3)
 		RETURNING id`,
 		p.PartnerReferenceNo, p.Amount, p.Currency,
 	)
@@ -230,18 +229,17 @@ func (r *TransactionRepository) InsertTransaction(ctx context.Context, p InsertT
 	return txID, err
 }
 
-func (r *TransactionRepository) InsertJournal(ctx context.Context, txID string) (string, error) {
-	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.InsertJournal")
+func (r *TransactionRepository) InsertAccountTransaction(ctx context.Context, p AccountTransaction) error {
+	ctx, span := telemetry.Tracer.Start(ctx, "TransactionRepository.InsertAccountTransaction")
 	defer span.End()
 
-	var journalID string
-	err := r.ext.GetContext(ctx, &journalID,
-		`INSERT INTO journals (transaction_id, journal_type, status)
-		 VALUES ($1, 'transfer', 'posted')
-		 RETURNING id`,
-		txID,
+	_, err := r.ext.NamedExecContext(ctx, `
+		INSERT INTO account_transactions (
+			id, account_id, transaction_id, direction, amount, created_at
+		) VALUES (:id, :account_id, :transaction_id, :direction, :amount, NOW())`,
+		p,
 	)
-	return journalID, err
+	return err
 }
 
 func (r *TransactionRepository) InsertLedger(ctx context.Context, p InsertLedgerParams) error {
@@ -252,12 +250,12 @@ func (r *TransactionRepository) InsertLedger(ctx context.Context, p InsertLedger
 		return nil
 	}
 
-	query := `INSERT INTO ledger_entries(journal_id, account_id, entry_type, amount, currency) VALUES `
+	query := `INSERT INTO ledger_entries(transaction_id, account_id, entry_type, amount, currency) VALUES `
 	vals := []interface{}{}
 	for i, e := range p.Entries {
 		pos := i * 5
 		query += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d),", pos+1, pos+2, pos+3, pos+4, pos+5)
-		vals = append(vals, p.JournalID, e.AccountID, e.EntryType, e.Amount, e.Currency)
+		vals = append(vals, p.TransactionID, e.AccountID, e.EntryType, e.Amount, e.Currency)
 	}
 	query = query[:len(query)-1] // Remove trailing comma
 
@@ -270,9 +268,10 @@ func (r *TransactionRepository) DebitAccount(ctx context.Context, accountID stri
 	defer span.End()
 
 	_, err := r.ext.ExecContext(ctx,
-		`UPDATE accounts
-		 SET available_balance = available_balance - $1
-		 WHERE id=$2`,
+		`UPDATE account_balances
+		 SET available_balance = available_balance - $1,
+		     last_updated = NOW()
+		 WHERE account_id=$2`,
 		amount,
 		accountID,
 	)
@@ -284,9 +283,10 @@ func (r *TransactionRepository) CreditAccount(ctx context.Context, accountID str
 	defer span.End()
 
 	_, err := r.ext.ExecContext(ctx,
-		`UPDATE accounts
-		 SET available_balance = available_balance + $1
-		 WHERE id=$2`,
+		`UPDATE account_balances
+		 SET available_balance = available_balance + $1,
+		     last_updated = NOW()
+		 WHERE account_id=$2`,
 		amount,
 		accountID,
 	)

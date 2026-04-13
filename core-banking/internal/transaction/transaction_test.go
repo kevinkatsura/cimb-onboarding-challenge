@@ -8,6 +8,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -51,19 +52,31 @@ func TestTransactionService_Transfer(t *testing.T) {
 				},
 			},
 			mockSetup: func(m *MockerForService) {
+				senderID := uuid.New()
+				beneficiaryID := uuid.New()
+
 				m.repo.On("GetIdempotency", mock.Anything, "SNAP-001").Return(nil, errors.New("not found"))
 				m.repo.On("BeginTx", mock.Anything).Return(nil, nil)
 				m.repo.On("WithTx", mock.Anything).Return(m.repo)
 				m.repo.On("GetSenderForUpdate", mock.Anything, "S-001").
-					Return(transaction.SenderAccount{Balance: 1000000, AccountNo: "S-001"}, nil)
-				m.repo.On("LockReceiver", mock.Anything, "B-001").Return(nil)
+					Return(transaction.SenderAccount{ID: senderID, Balance: 1000000, AccountNo: "S-001"}, nil)
+				m.repo.On("LockReceiver", mock.Anything, "B-001").Return(beneficiaryID, nil)
 				m.repo.On("InsertTransaction", mock.Anything, mock.MatchedBy(func(p transaction.InsertTransactionParams) bool {
 					return p.FeeType == "OUR" && p.Remark == "test remark"
 				})).Return("00000000-0000-0000-0000-000000000005", nil)
-				m.repo.On("InsertJournal", mock.Anything, "00000000-0000-0000-0000-000000000005").Return("00000000-0000-0000-0000-000000000006", nil)
+
+				txUUID := uuid.MustParse("00000000-0000-0000-0000-000000000005")
 				m.repo.On("InsertLedger", mock.Anything, mock.MatchedBy(func(p transaction.InsertLedgerParams) bool {
-					return len(p.Entries) == 3 && p.Entries[0].Amount == 52500
+					return len(p.Entries) == 2 && p.Entries[0].Amount == 52500 && p.TransactionID == txUUID
 				})).Return(nil)
+
+				m.repo.On("InsertAccountTransaction", mock.Anything, mock.MatchedBy(func(p transaction.AccountTransaction) bool {
+					return p.AccountID == senderID && p.Direction == "out"
+				})).Return(nil)
+				m.repo.On("InsertAccountTransaction", mock.Anything, mock.MatchedBy(func(p transaction.AccountTransaction) bool {
+					return p.AccountID == beneficiaryID && p.Direction == "in"
+				})).Return(nil)
+
 				m.repo.On("DebitAccount", mock.Anything, "S-001", int64(52500)).Return(nil)
 				m.repo.On("CreditAccount", mock.Anything, "B-001", int64(50000)).Return(nil)
 				m.repo.On("CreditAccount", mock.Anything, SystemFeeAccountID, int64(StandardFee)).Return(nil)
@@ -86,24 +99,29 @@ func TestTransactionService_Transfer(t *testing.T) {
 				},
 			},
 			mockSetup: func(m *MockerForService) {
+				senderID := uuid.New()
+				beneficiaryID := uuid.New()
+
 				m.repo.On("GetIdempotency", mock.Anything, "00000000-0000-0000-0000-000000000004").
 					Return(nil, errors.New("not found"))
 
-				// Return nil for dbTx in mock to avoid Rollback panic on &sqlx.Tx{}
 				m.repo.On("BeginTx", mock.Anything).Return(nil, nil)
 				m.repo.On("WithTx", mock.Anything).Return(m.repo)
 
-				// Granular steps - amount is 100 because ParseSNAPAmount rounds to units
 				m.repo.On("GetSenderForUpdate", mock.Anything, "A").
-					Return(transaction.SenderAccount{Balance: 1000000, AccountNo: "A"}, nil)
-				m.repo.On("LockReceiver", mock.Anything, "B").Return(nil)
+					Return(transaction.SenderAccount{ID: senderID, Balance: 1000000, AccountNo: "A"}, nil)
+				m.repo.On("LockReceiver", mock.Anything, "B").Return(beneficiaryID, nil)
 				m.repo.On("InsertTransaction", mock.Anything, mock.Anything).
 					Return("00000000-0000-0000-0000-000000000002", nil)
-				m.repo.On("InsertJournal", mock.Anything, "00000000-0000-0000-0000-000000000002").
-					Return("00000000-0000-0000-0000-000000000003", nil)
+
+				txUUID := uuid.MustParse("00000000-0000-0000-0000-000000000002")
 				m.repo.On("InsertLedger", mock.Anything, mock.MatchedBy(func(p transaction.InsertLedgerParams) bool {
-					return len(p.Entries) == 3 && p.Entries[1].Amount == 7500 // 10000 - 2500
+					return len(p.Entries) == 2 && p.Entries[1].Amount == 7500 && p.TransactionID == txUUID
 				})).Return(nil)
+
+				m.repo.On("InsertAccountTransaction", mock.Anything, mock.Anything).Return(nil)
+				m.repo.On("InsertAccountTransaction", mock.Anything, mock.Anything).Return(nil)
+
 				m.repo.On("DebitAccount", mock.Anything, "A", int64(10000)).Return(nil)
 				m.repo.On("CreditAccount", mock.Anything, "B", int64(7500)).Return(nil)
 				m.repo.On("CreditAccount", mock.Anything, SystemFeeAccountID, int64(StandardFee)).Return(nil)
@@ -202,14 +220,20 @@ func TestService_TransferWithLock(t *testing.T) {
 	m.repo.On("BeginTx", mock.Anything).Return(nil, nil)
 	m.repo.On("WithTx", mock.Anything).Return(m.repo)
 
-	m.repo.On("GetSenderForUpdate", mock.Anything, "A").Return(transaction.SenderAccount{Balance: 100000, AccountNo: "A"}, nil)
-	m.repo.On("LockReceiver", mock.Anything, "B").Return(nil)
+	senderID := uuid.New()
+	beneficiaryID := uuid.New()
+	m.repo.On("GetSenderForUpdate", mock.Anything, "A").Return(transaction.SenderAccount{ID: senderID, Balance: 100000, AccountNo: "A"}, nil)
+	m.repo.On("LockReceiver", mock.Anything, "B").Return(beneficiaryID, nil)
 	m.repo.On("InsertTransaction", mock.Anything, mock.Anything).Return("00000000-0000-0000-0000-000000000001", nil)
-	m.repo.On("InsertJournal", mock.Anything, "00000000-0000-0000-0000-000000000001").Return("00000000-0000-0000-0000-000000000002", nil)
+
+	txUUID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	m.repo.On("InsertLedger", mock.Anything, mock.MatchedBy(func(p transaction.InsertLedgerParams) bool {
-		// SHA: senderDebit = 10000 + 1000 = 11000, beneficiaryCredit = 10000 - 1500 = 8500
-		return len(p.Entries) == 3 && p.Entries[0].Amount == 11000 && p.Entries[1].Amount == 8500
+		return len(p.Entries) == 2 && p.Entries[0].Amount == 11000 && p.TransactionID == txUUID
 	})).Return(nil)
+
+	m.repo.On("InsertAccountTransaction", mock.Anything, mock.Anything).Return(nil)
+	m.repo.On("InsertAccountTransaction", mock.Anything, mock.Anything).Return(nil)
+
 	m.repo.On("DebitAccount", mock.Anything, "A", int64(11000)).Return(nil)
 	m.repo.On("CreditAccount", mock.Anything, "B", int64(8500)).Return(nil)
 	m.repo.On("CreditAccount", mock.Anything, SystemFeeAccountID, int64(StandardFee)).Return(nil)

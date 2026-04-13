@@ -30,6 +30,7 @@ type ResponseSuccessAccount struct {
 	ResponseMessage string `json:"responseMessage"`
 	ID              string `json:"id"`
 	AccountNumber   string `json:"account_number"`
+	ProductCode     string `json:"product_code"`
 }
 
 type ResponseSuccessAccountList struct {
@@ -72,7 +73,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		response.WriteError(ctx, w, snap.AccountServiceCode, "account_create_failed", err,
 			"customer_id", req.CustomerID,
-			"account_type", req.AccountType,
+			"product_code", req.ProductCode,
 		)
 		return
 	}
@@ -148,8 +149,8 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("customer_id"); v != "" {
 		filter.CustomerID = &v
 	}
-	if v := q.Get("account_type"); v != "" {
-		filter.AccountType = &v
+	if v := q.Get("product_code"); v != "" {
+		filter.ProductCode = &v
 	}
 	if v := q.Get("status"); v != "" {
 		filter.Status = &v

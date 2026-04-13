@@ -139,10 +139,6 @@ func (_m *MockRepository) SoftDelete(ctx context.Context, id string) error {
 func (_m *MockRepository) UpdateStatus(ctx context.Context, id string, status string) error {
 	ret := _m.Called(ctx, id, status)
 
-	if len(ret) == 0 {
-		panic("no return value specified for UpdateStatus")
-	}
-
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
 		r0 = rf(ctx, id, status)
@@ -151,6 +147,36 @@ func (_m *MockRepository) UpdateStatus(ctx context.Context, id string, status st
 	}
 
 	return r0
+}
+
+func (_m *MockRepository) GetBalance(ctx context.Context, accountID string) (*AccountBalance, error) {
+	ret := _m.Called(ctx, accountID)
+	return ret.Get(0).(*AccountBalance), ret.Error(1)
+}
+
+func (_m *MockRepository) UpdateBalance(ctx context.Context, accountID string, amount int64) error {
+	ret := _m.Called(ctx, accountID, amount)
+	return ret.Error(0)
+}
+
+func (_m *MockRepository) GetProduct(ctx context.Context, code string) (*Product, error) {
+	ret := _m.Called(ctx, code)
+	return ret.Get(0).(*Product), ret.Error(1)
+}
+
+func (_m *MockRepository) GetCustomerByID(ctx context.Context, id string) (*Customer, error) {
+	ret := _m.Called(ctx, id)
+	return ret.Get(0).(*Customer), ret.Error(1)
+}
+
+func (_m *MockRepository) CreateCustomer(ctx context.Context, cust *Customer) error {
+	ret := _m.Called(ctx, cust)
+	return ret.Error(0)
+}
+
+func (_m *MockRepository) UpdateCustomer(ctx context.Context, cust *Customer) error {
+	ret := _m.Called(ctx, cust)
+	return ret.Error(0)
 }
 
 // NewMockRepository creates a new instance of MockRepository. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

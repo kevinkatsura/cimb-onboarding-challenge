@@ -114,7 +114,8 @@ func (s *Service) Transfer(ctx context.Context, req IntrabankTransferRequest) (*
 	}
 
 	// 2. Lock receiver
-	if err := txRepo.LockReceiver(ctx, req.BeneficiaryAccountNo); err != nil {
+	beneficiaryID, err := txRepo.LockReceiver(ctx, req.BeneficiaryAccountNo)
+	if err != nil {
 		span.RecordError(err)
 		return nil, apperror.NewNotFound("beneficiary account not found")
 	}
@@ -189,26 +190,44 @@ func (s *Service) Transfer(ctx context.Context, req IntrabankTransferRequest) (*
 		return nil, apperror.NewInternal("failed to record transaction", err)
 	}
 
-	// 4. Insert Journal
-	journalID, err := txRepo.InsertJournal(ctx, txID)
-	if err != nil {
-		span.RecordError(err)
-		return nil, apperror.NewInternal("failed to record journal", err)
-	}
+	txUUID, _ := uuid.Parse(txID)
 
-	// 5. Insert Ledger Entries
-	journalUUID, _ := uuid.Parse(journalID)
+	// 4. Insert Ledger Entries
 	err = txRepo.InsertLedger(ctx, InsertLedgerParams{
-		JournalID: journalUUID,
+		TransactionID: txUUID,
 		Entries: []LedgerEntryParam{
-			{AccountID: req.SourceAccountNo, EntryType: "debit", Amount: senderDebit, Currency: req.Amount.Currency},
-			{AccountID: req.BeneficiaryAccountNo, EntryType: "credit", Amount: beneficiaryCredit, Currency: req.Amount.Currency},
-			// {AccountID: SystemFeeAccountID, EntryType: "credit", Amount: StandardFee, Currency: req.Amount.Currency},
+			{AccountID: sender.ID.String(), EntryType: "debit", Amount: senderDebit, Currency: req.Amount.Currency},
+			{AccountID: beneficiaryID.String(), EntryType: "credit", Amount: beneficiaryCredit, Currency: req.Amount.Currency},
 		},
 	})
 	if err != nil {
 		span.RecordError(err)
 		return nil, apperror.NewInternal("failed to record ledger", err)
+	}
+
+	// 5. Insert Account Transactions (User-Facing History)
+	err = txRepo.InsertAccountTransaction(ctx, AccountTransaction{
+		ID:            uuid.New(),
+		AccountID:     sender.ID,
+		TransactionID: txUUID,
+		Direction:     "out",
+		Amount:        senderDebit,
+	})
+	if err != nil {
+		span.RecordError(err)
+		return nil, apperror.NewInternal("failed to record sender history", err)
+	}
+
+	err = txRepo.InsertAccountTransaction(ctx, AccountTransaction{
+		ID:            uuid.New(),
+		AccountID:     beneficiaryID,
+		TransactionID: txUUID,
+		Direction:     "in",
+		Amount:        beneficiaryCredit,
+	})
+	if err != nil {
+		span.RecordError(err)
+		return nil, apperror.NewInternal("failed to record beneficiary history", err)
 	}
 
 	// 6. Update Balances

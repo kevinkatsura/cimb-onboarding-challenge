@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"encoding/json"
 
 	"core-banking/pkg/apperror"
 	"core-banking/pkg/idgen"
@@ -56,38 +57,90 @@ func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 	ctx, span := telemetry.Tracer.Start(ctx, "accountService.CreateAccount")
 	defer span.End()
 	span.SetAttributes(telemetry.ServiceAttrs("CreateAccount", "account", "onboarding")...)
-	span.SetAttributes(
-		attribute.String("customer.id", req.CustomerID),
-		attribute.String("account.type", req.AccountType),
-		attribute.String("currency", req.Currency),
-	)
+
+	var customer *Customer
+	var err error
+
+	if req.CustomerID != "" {
+		customer, err = s.repo.GetCustomerByID(ctx, req.CustomerID)
+		if err != nil {
+			span.RecordError(err)
+			return nil, apperror.NewNotFound("customer not found")
+		}
+		// Update customer with new SNAP info if provided
+		if req.Name != "" {
+			customer.FullName = req.Name
+		}
+		if req.Email != "" {
+			customer.Email = req.Email
+		}
+		if req.PhoneNo != "" {
+			customer.PhoneNumber = req.PhoneNo
+		}
+	} else {
+		// New Customer Onboarding
+		customer = &Customer{
+			FullName:    req.Name,
+			Email:       req.Email,
+			PhoneNumber: req.PhoneNo,
+			KYCStatus:   "pending",
+			RiskLevel:   "low",
+		}
+	}
+
+	// Map SNAP fields
+	customer.PartnerReferenceNo = req.PartnerReferenceNo
+	customer.CountryCode = req.CountryCode
+	customer.ExternalCustomerID = req.CustomerID // Original SNAP ID
+	if req.DeviceInfo != nil {
+		customer.DeviceOS = req.DeviceInfo.OS
+		customer.DeviceOSVersion = req.DeviceInfo.OSVersion
+		customer.DeviceModel = req.DeviceInfo.Model
+		customer.DeviceManufacturer = req.DeviceInfo.Manufacturer
+	}
+	customer.Lang = req.Lang
+	customer.Locale = req.Locale
+	customer.OnboardingPartner = req.OnboardingPartner
+	customer.RedirectURL = req.RedirectURL
+	customer.Scopes = req.Scopes
+	customer.SeamlessData = req.SeamlessData
+	customer.SeamlessSign = req.SeamlessSign
+	customer.State = req.State
+	customer.MerchantID = req.MerchantID
+	customer.SubMerchantID = req.SubMerchantID
+	customer.TerminalType = req.TerminalType
+
+	if req.AdditionalInfo != nil {
+		customer.AdditionalInfo, _ = json.Marshal(req.AdditionalInfo)
+	}
+
+	if customer.ID == uuid.Nil {
+		err = s.repo.CreateCustomer(ctx, customer)
+	} else {
+		err = s.repo.UpdateCustomer(ctx, customer)
+	}
+
+	if err != nil {
+		span.RecordError(err)
+		return nil, apperror.NewInternal("failed to process customer", err)
+	}
 
 	accNumber, err := s.accNumGen.Generate()
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "account number generation failed")
 		return nil, apperror.NewInternal("failed to generate account number", err)
 	}
 
-	customerID, err := uuid.Parse(req.CustomerID)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "invalid customer ID format")
-		return nil, apperror.NewBadRequest("invalid customer ID format")
-	}
-
 	acc := Account{
-		CustomerID:     customerID,
-		AccountNumber:  accNumber,
-		AccountType:    req.AccountType,
-		Currency:       req.Currency,
-		OverdraftLimit: req.OverdraftLimit,
+		CustomerID:    customer.ID,
+		AccountNumber: accNumber,
+		ProductCode:   req.ProductCode,
+		Currency:      req.Currency,
 	}
 
 	err = s.repo.Create(ctx, &acc)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "database create failed")
 		return nil, apperror.NewInternal("failed to create account", err)
 	}
 
@@ -99,7 +152,7 @@ func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 	}
 
 	accountCreateCounter.Add(ctx, 1, metric.WithAttributes(
-		attribute.String("account_type", req.AccountType),
+		attribute.String("product_code", req.ProductCode),
 		attribute.String("currency", req.Currency),
 	))
 
@@ -215,26 +268,28 @@ func (s *Service) DeleteAccount(ctx context.Context, id string) error {
 	acc, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "account lookup failed")
 		return apperror.NewNotFound("account not found")
 	}
 
-	if acc.AvailableBalance != 0 {
-		err := fmt.Errorf("cannot delete account with non-zero balance (balance: %d)", acc.AvailableBalance)
+	bal, err := s.repo.GetBalance(ctx, id)
+	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "business validation failed")
+		return apperror.NewInternal("failed to fetch balance", err)
+	}
+
+	if bal.AvailableBalance != 0 {
+		err := fmt.Errorf("cannot delete account with non-zero balance (balance: %d)", bal.AvailableBalance)
+		span.RecordError(err)
 		return apperror.NewBadRequest("cannot delete account with non-zero balance")
 	}
 
 	if acc.Status != "closed" {
-		span.SetStatus(codes.Error, "account not closed")
 		return apperror.NewBadRequest("account must be closed before deletion")
 	}
 
 	err = s.repo.SoftDelete(ctx, id)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "soft delete failed")
 		return apperror.NewInternal("failed to delete account", err)
 	}
 
@@ -257,18 +312,15 @@ func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, am
 	span.SetAttributes(attribute.String("account.id", accountID))
 
 	if s.cache == nil {
-		span.SetStatus(codes.Error, "redis not configured")
 		return apperror.NewUnavailable("redis client not configured")
 	}
 
 	lockAcquired, err := s.cache.AcquireLock(ctx, accountID, 30*time.Second)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "lock acquisition failed")
 		return apperror.NewInternal("failed to acquire lock", err)
 	}
 	if !lockAcquired {
-		span.SetStatus(codes.Error, "lock contention")
 		return apperror.NewConflict("account is currently being modified by another process")
 	}
 
@@ -279,17 +331,33 @@ func (s *Service) UpdateAccountBalance(ctx context.Context, accountID string, am
 		}()
 	}()
 
-	account, err := s.repo.GetByID(ctx, accountID)
+	acc, err := s.repo.GetByID(ctx, accountID)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, "account fetch failed")
 		return apperror.NewNotFound("account not found")
 	}
 
-	newBalance := account.AvailableBalance + amount
-	if newBalance < -account.OverdraftLimit {
-		span.SetStatus(codes.Error, "insufficient funds")
-		return apperror.NewBadRequest(fmt.Sprintf("insufficient funds: balance would be %d, overdraft limit %d", newBalance, account.OverdraftLimit))
+	prod, err := s.repo.GetProduct(ctx, acc.ProductCode)
+	if err != nil {
+		span.RecordError(err)
+		return apperror.NewInternal("failed to fetch product info", err)
+	}
+
+	bal, err := s.repo.GetBalance(ctx, accountID)
+	if err != nil {
+		span.RecordError(err)
+		return apperror.NewInternal("failed to fetch balance", err)
+	}
+
+	newBalance := bal.AvailableBalance + amount
+	if newBalance < -prod.OverdraftLimit {
+		return apperror.NewBadRequest(fmt.Sprintf("insufficient funds: balance would be %d, overdraft limit %d", newBalance, prod.OverdraftLimit))
+	}
+
+	err = s.repo.UpdateBalance(ctx, accountID, amount)
+	if err != nil {
+		span.RecordError(err)
+		return apperror.NewInternal("failed to update balance", err)
 	}
 
 	if s.cache != nil {

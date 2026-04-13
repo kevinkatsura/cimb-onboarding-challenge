@@ -3,10 +3,36 @@ package account
 import "core-banking/internal/snap"
 
 type CreateAccountRequest struct {
-	CustomerID     string `json:"customer_id"`
-	AccountType    string `json:"account_type"`
-	Currency       string `json:"currency"`
-	OverdraftLimit int64  `json:"overdraft_limit"`
+	PartnerReferenceNo string                   `json:"partnerReferenceNo"`
+	CustomerID         string                   `json:"customerId"`
+	CountryCode        string                   `json:"countryCode"`
+	DeviceInfo         *DeviceInfo              `json:"deviceInfo,omitempty"`
+	Name               string                   `json:"name"`
+	Email              string                   `json:"email"`
+	PhoneNo            string                   `json:"phoneNo"`
+	OnboardingPartner  string                   `json:"onboardingPartner"`
+	RedirectURL        string                   `json:"redirectUrl"`
+	Scopes             string                   `json:"scopes"`
+	SeamlessData       string                   `json:"seamlessData"`
+	SeamlessSign       string                   `json:"seamlessSign"`
+	State              string                   `json:"state"`
+	Lang               string                   `json:"lang"`
+	Locale             string                   `json:"locale"`
+	MerchantID         string                   `json:"merchantId"`
+	SubMerchantID      string                   `json:"subMerchantId"`
+	TerminalType       string                   `json:"terminalType"`
+	AdditionalInfo     *snap.SNAPAdditionalInfo `json:"additionalInfo,omitempty"`
+
+	// Core banking fields
+	ProductCode string `json:"product_code"`
+	Currency    string `json:"currency"`
+}
+
+type DeviceInfo struct {
+	OS           string `json:"os"`
+	OSVersion    string `json:"osVersion"`
+	Model        string `json:"model"`
+	Manufacturer string `json:"manufacturer"`
 }
 
 type UpdateAccountStatusRequest struct {

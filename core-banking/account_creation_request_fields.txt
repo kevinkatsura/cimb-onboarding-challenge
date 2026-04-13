@@ -1,0 +1,29 @@
+Parameter	Data Type	Mandatory	Length	Description
+partnerReferenceNo	String	O	64	Transaction identifier on service consumer system
+customerId	String	O	45	account ID of the customer
+
+countryCode	String	O	2	Requestor’s country code => consent/after account creation
+
+deviceInfo	Object	O	-	=> in API consent, after account creation
+os	String	O	40	Device’s OS
+osVersion	String	O	40	Device’s OS version
+model	String	O	40	Device’s model
+manufacturer	String	O	40	Device’s manufacturer
+
+name	String	O	128	User’s name => mandatory in pre-request
+email	String	O	254	RFC 3696 Length 254 after “<” and “>” => mandatory in pre-request
+phoneNo	String	O	16	User’s phone number. Format: 62xxxxxxxxxxxxx => mandatory in pre-request
+
+lang	String	O	8	language support parameter => not included
+locale	String	O	5	Locale and language that customer selected in app => not included
+
+onboardingPartner	String	O	8	Onboarding partner of the customer => mandatory in consent/after account creation
+redirectUrl	String	O	2048	Merchant call back URL => not included (only in QRIS, that too as response parameter)
+scopes	String	O	256	The scopes of the authorization => not included (only in authorization)
+seamlessData	String	O	512	the structure for the mobile and verification information，the value should be URLencoded. => not available/included
+seamlessSign	String	O	512	the signature data for the seamleassData, the value should be URLencoded => not available/included
+state	String	O	32	state   => not available/included
+merchantId	String	O	64	Merchant identifier that is unique per each merchant => only in API verify OTP/before account creation
+subMerchantId	String	O	32	Sub merchant ID => not available/included
+terminalType	Object	O	32	Indicates the source terminal type and how the redirect will happen => not available/included
+additionalInfo	Object	O		Additional information for custom use that are not provided by SNA

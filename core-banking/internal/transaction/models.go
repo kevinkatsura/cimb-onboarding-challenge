@@ -12,11 +12,10 @@ type Transaction struct {
 	ID                 uuid.UUID  `db:"id" json:"id"`
 	PartnerReferenceNo string     `db:"partner_reference_no" json:"partnerReferenceNo"`
 	ReferenceNo        *string    `db:"reference_no" json:"referenceNo,omitempty"`
-	TransactionType    string     `db:"transaction_type" json:"transactionType"`
-	Status             string     `db:"status" json:"status"`
+	TransactionType    string     `db:"transaction_type" json:"transactionType"` // transfer, deposit, withdrawal...
+	Status             string     `db:"status" json:"status"`                    // initiated, completed, failed, reversed
 	Amount             int64      `db:"amount" json:"amount"`
 	Currency           string     `db:"currency" json:"currency"`
-	Description        *string    `db:"description" json:"description,omitempty"`
 	CreatedAt          time.Time  `db:"created_at" json:"createdAt"`
 	UpdatedAt          time.Time  `db:"updated_at" json:"updatedAt"`
 	CompletedAt        *time.Time `db:"completed_at" json:"completedAt,omitempty"`
@@ -36,51 +35,44 @@ type TransferDetail struct {
 	FeeType                string     `db:"fee_type" json:"feeType,omitempty"`
 	TransactionDate        *time.Time `db:"transaction_date" json:"transactionDate,omitempty"`
 	Remark                 string     `db:"remark" json:"remark,omitempty"`
-	OriginatorInfos        *[]byte    `db:"originator_infos" json:"originatorInfos,omitempty"`
-	AdditionalInfo         *[]byte    `db:"additional_info" json:"additionalInfo,omitempty"`
+	OriginatorInfos        []byte     `db:"originator_infos" json:"originatorInfos,omitempty"`
+	AdditionalInfo         []byte     `db:"additional_info" json:"additionalInfo,omitempty"`
 	CreatedAt              time.Time  `db:"created_at" json:"createdAt"`
 }
 
-type Journal struct {
-	ID            uuid.UUID `db:"id"`
-	TransactionID uuid.UUID `db:"transaction_id"`
-	JournalType   string    `db:"journal_type"`
-	Status        string    `db:"status"`
-	PostedAt      time.Time `db:"posted_at"`
-	CreatedAt     time.Time `db:"created_at"`
-}
-
 type LedgerEntry struct {
-	ID           uuid.UUID `db:"id"`
-	JournalID    uuid.UUID `db:"journal_id"`
-	AccountID    uuid.UUID `db:"account_id"`
-	EntryType    string    `db:"entry_type"`
-	Amount       int64     `db:"amount"`
-	Currency     string    `db:"currency"`
-	BalanceAfter *int64    `db:"balance_after"`
-	CreatedAt    time.Time `db:"created_at"`
+	ID            uuid.UUID `db:"id" json:"id"`
+	TransactionID uuid.UUID `db:"transaction_id" json:"transactionId"`
+	AccountID     uuid.UUID `db:"account_id" json:"accountId"`
+	EntryType     string    `db:"entry_type" json:"entryType"` // debit, credit
+	Amount        int64     `db:"amount" json:"amount"`
+	Currency      string    `db:"currency" json:"currency"`
+	CreatedAt     time.Time `db:"created_at" json:"createdAt"`
 }
 
-type Payment struct {
-	ID            uuid.UUID `db:"id"`
-	TransactionID uuid.UUID `db:"transaction_id"`
-	PaymentMethod string    `db:"payment_method"`
-	Provider      string    `db:"provider"`
-	Status        string    `db:"status"`
-	FeeAmount     int64     `db:"fee_amount"`
-	Metadata      *[]byte   `db:"metadata"`
-	CreatedAt     time.Time `db:"created_at"`
-	UpdatedAt     time.Time `db:"updated_at"`
+type AccountBalance struct {
+	AccountID        uuid.UUID `db:"account_id" json:"accountId"`
+	AvailableBalance int64     `db:"available_balance" json:"availableBalance"`
+	PendingBalance   int64     `db:"pending_balance" json:"pendingBalance"`
+	LastUpdated      time.Time `db:"last_updated" json:"lastUpdated"`
+}
+
+type AccountTransaction struct {
+	ID            uuid.UUID `db:"id" json:"id"`
+	AccountID     uuid.UUID `db:"account_id" json:"accountId"`
+	TransactionID uuid.UUID `db:"transaction_id" json:"transactionId"`
+	Direction     string    `db:"direction" json:"direction"` // in, out
+	Amount        int64     `db:"amount" json:"amount"`
+	CreatedAt     time.Time `db:"created_at" json:"createdAt"`
 }
 
 type IdempotencyKey struct {
-	ID              uuid.UUID `db:"id"`
-	Key             string    `db:"key"`
-	RequestHash     string    `db:"request_hash"`
-	ResponseCode    string    `db:"response_code"`
-	ResponseMessage string    `db:"response_message"`
-	ResponseBody    []byte    `db:"response_body"`
-	CreatedAt       time.Time `db:"created_at"`
+	ID              uuid.UUID `db:"id" json:"id"`
+	Key             string    `db:"key" json:"key"`
+	ResponseCode    string    `db:"response_code" json:"responseCode"`
+	ResponseMessage string    `db:"response_message" json:"responseMessage"`
+	ResponseBody    []byte    `db:"response_body" json:"responseBody"`
+	CreatedAt       time.Time `db:"created_at" json:"createdAt"`
 }
 
 type TransactionListFilter struct {
@@ -121,8 +113,8 @@ type LedgerEntryParam struct {
 }
 
 type InsertLedgerParams struct {
-	JournalID uuid.UUID
-	Entries   []LedgerEntryParam
+	TransactionID uuid.UUID
+	Entries       []LedgerEntryParam
 }
 
 type AuditLog struct {
@@ -146,7 +138,8 @@ type FXRate struct {
 }
 
 type SenderAccount struct {
-	Balance    int64  `db:"balance"`
-	CustomerID string `db:"customer_id"`
-	AccountNo  string `db:"account_number"`
+	ID         uuid.UUID `db:"id"`
+	Balance    int64     `db:"balance"`
+	CustomerID string    `db:"customer_id"`
+	AccountNo  string    `db:"account_number"`
 }

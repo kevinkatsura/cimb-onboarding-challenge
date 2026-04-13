@@ -7,17 +7,43 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
+func InsertProducts(tx *sqlx.Tx, data []account.Product) error {
+	query := `
+	INSERT INTO products (
+		code, name, currency, min_balance, overdraft_limit, daily_limit, created_at
+	)
+	VALUES (
+		:code, :name, :currency, :min_balance, :overdraft_limit, :daily_limit, :created_at
+	)`
+	_, err := tx.NamedExec(query, data)
+	return err
+}
+
 func InsertCustomers(tx *sqlx.Tx, data []account.Customer) error {
 	query := `
 	INSERT INTO customers (
 		id, full_name, date_of_birth, nationality,
 		email, phone_number, kyc_status, kyc_verified_at,
-		risk_level, pep_flag, created_at, updated_at
+		risk_level, pep_flag, 
+		partner_reference_no, country_code, external_customer_id,
+		device_os, device_os_version, device_model, device_manufacturer,
+		lang, locale, onboarding_partner, redirect_url,
+		scopes, seamless_data, seamless_sign, state,
+		merchant_id, sub_merchant_id, terminal_type,
+		additional_info,
+		created_at, updated_at
 	)
 	VALUES (
 		:id, :full_name, :date_of_birth, :nationality,
 		:email, :phone_number, :kyc_status, :kyc_verified_at,
-		:risk_level, :pep_flag, :created_at, :updated_at
+		:risk_level, :pep_flag,
+		:partner_reference_no, :country_code, :external_customer_id,
+		:device_os, :device_os_version, :device_model, :device_manufacturer,
+		:lang, :locale, :onboarding_partner, :redirect_url,
+		:scopes, :seamless_data, :seamless_sign, :state,
+		:merchant_id, :sub_merchant_id, :terminal_type,
+		:additional_info,
+		:created_at, :updated_at
 	)`
 	_, err := tx.NamedExec(query, data)
 	return err
@@ -26,14 +52,12 @@ func InsertCustomers(tx *sqlx.Tx, data []account.Customer) error {
 func InsertAccounts(tx *sqlx.Tx, data []account.Account) error {
 	query := `
 	INSERT INTO accounts (
-		id, customer_id, account_number, account_type,
-		currency, status, available_balance, pending_balance,
-		overdraft_limit, opened_at, created_at, updated_at
+		id, customer_id, account_number, product_code,
+		currency, status, opened_at, created_at, updated_at
 	)
 	VALUES (
-		:id, :customer_id, :account_number, :account_type,
-		:currency, :status, :available_balance, :pending_balance,
-		:overdraft_limit, :opened_at, :created_at, :updated_at
+		:id, :customer_id, :account_number, :product_code,
+		:currency, :status, :opened_at, :created_at, :updated_at
 	)`
 	_, err := tx.NamedExec(query, data)
 	return err
@@ -44,12 +68,12 @@ func InsertTransactions(tx *sqlx.Tx, data []transaction.Transaction) error {
 	INSERT INTO transactions (
 		id, partner_reference_no, reference_no,
 		transaction_type, status, amount, currency,
-		description, created_at, completed_at
+		created_at, completed_at
 	)
 	VALUES (
 		:id, :partner_reference_no, :reference_no,
 		:transaction_type, :status, :amount, :currency,
-		:description, :created_at, :completed_at
+		:created_at, :completed_at
 	)`
 	_, err := tx.NamedExec(query, data)
 	return err
@@ -75,45 +99,17 @@ func InsertTransferDetails(tx *sqlx.Tx, data []transaction.TransferDetail) error
 	return err
 }
 
-func InsertJournals(tx *sqlx.Tx, data []transaction.Journal) error {
-	query := `
-	INSERT INTO journals (
-		id, transaction_id, journal_type, status, posted_at, created_at
-	)
-	VALUES (
-		:id, :transaction_id, :journal_type, :status, :posted_at, :created_at
-	)`
-	_, err := tx.NamedExec(query, data)
-	return err
-}
-
 func InsertLedgerEntries(tx *sqlx.Tx, data []transaction.LedgerEntry) error {
 	query := `
 	INSERT INTO ledger_entries (
-		id, journal_id, account_id,
+		id, transaction_id, account_id,
 		entry_type, amount, currency,
-		balance_after, created_at
+		created_at
 	)
 	VALUES (
-		:id, :journal_id, :account_id,
+		:id, :transaction_id, :account_id,
 		:entry_type, :amount, :currency,
-		:balance_after, :created_at
-	)`
-	_, err := tx.NamedExec(query, data)
-	return err
-}
-
-func InsertPayments(tx *sqlx.Tx, data []transaction.Payment) error {
-	query := `
-	INSERT INTO payments (
-		id, transaction_id, payment_method,
-		provider, status, fee_amount, metadata,
-		created_at, updated_at
-	)
-	VALUES (
-		:id, :transaction_id, :payment_method,
-		:provider, :status, :fee_amount, :metadata,
-		:created_at, :updated_at
+		:created_at
 	)`
 	_, err := tx.NamedExec(query, data)
 	return err
@@ -136,10 +132,10 @@ func InsertAuditLogs(tx *sqlx.Tx, data []transaction.AuditLog) error {
 func InsertIdempotencyKeys(tx *sqlx.Tx, data []transaction.IdempotencyKey) error {
 	query := `
 	INSERT INTO idempotency_keys (
-		id, key, request_hash, response_code, response_message, response_body, created_at
+		id, key, response_code, response_message, response_body, created_at
 	)
 	VALUES (
-		:id, :key, :request_hash, :response_code, :response_message, :response_body, :created_at
+		:id, :key, :response_code, :response_message, :response_body, :created_at
 	)`
 	_, err := tx.NamedExec(query, data)
 	return err
@@ -152,6 +148,33 @@ func InsertFXRates(tx *sqlx.Tx, data []transaction.FXRate) error {
 	)
 	VALUES (
 		:id, :base_currency, :quote_currency, :rate, :effective_at
+	)`
+	_, err := tx.NamedExec(query, data)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func InsertAccountBalances(tx *sqlx.Tx, data []account.AccountBalance) error {
+	query := `
+	INSERT INTO account_balances (
+		account_id, available_balance, pending_balance, last_updated
+	)
+	VALUES (
+		:account_id, :available_balance, :pending_balance, :last_updated
+	)`
+	_, err := tx.NamedExec(query, data)
+	return err
+}
+
+func InsertAccountTransactions(tx *sqlx.Tx, data []account.AccountTransaction) error {
+	query := `
+	INSERT INTO account_transactions (
+		id, account_id, transaction_id, direction, amount, created_at
+	)
+	VALUES (
+		:id, :account_id, :transaction_id, :direction, :amount, :created_at
 	)`
 	_, err := tx.NamedExec(query, data)
 	return err

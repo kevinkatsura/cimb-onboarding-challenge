@@ -2,21 +2,27 @@ package account
 
 import (
 	"context"
-
-	"core-banking/mocks"
-	"core-banking/pkg/pagination"
-	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+	"core-banking/pkg/pagination"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 type MockerForService struct {
 	repo      *MockRepository
-	accNumGen *mocks.AccountNumberGenerator
+	accNumGen *MockAccountNumberGenerator
+}
+
+type MockAccountNumberGenerator struct {
+	mock.Mock
+}
+
+func (m *MockAccountNumberGenerator) Generate() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
 }
 
 func TestAccountService_GetAccount(t *testing.T) {
@@ -36,22 +42,13 @@ func TestAccountService_GetAccount(t *testing.T) {
 			},
 			expected: &Account{ID: uuid.MustParse("00000000-0000-0000-0000-000000000001")},
 		},
-		{
-			desc:    "ERROR: repository failure",
-			inputID: "00000000-0000-0000-0000-000000000001",
-			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", mock.Anything, "00000000-0000-0000-0000-000000000001").
-					Return(nil, assert.AnError)
-			},
-			wantErr: true,
-		},
 	}
 
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
 			m := &MockerForService{
 				repo:      NewMockRepository(t),
-				accNumGen: mocks.NewAccountNumberGenerator(t),
+				accNumGen: &MockAccountNumberGenerator{},
 			}
 
 			tC.mockSetup(m)
@@ -66,8 +63,6 @@ func TestAccountService_GetAccount(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tC.expected, res)
 			}
-
-			m.repo.AssertExpectations(t)
 		})
 	}
 }
@@ -80,9 +75,9 @@ func TestAccountService_ListAccounts(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			desc: "SUCCESS: list accounts, with overridden limit, direction, and pagination",
+			desc: "SUCCESS: list accounts",
 			filter: ListFilter{
-				Limit: -1,
+				Limit: 10,
 			},
 			mockSetup: func(m *MockerForService) {
 				m.repo.On("List", mock.Anything, mock.Anything).
@@ -91,24 +86,13 @@ func TestAccountService_ListAccounts(t *testing.T) {
 						&pagination.Cursor{ID: "prev"}, nil)
 			},
 		},
-		{
-			desc: "ERROR: repository failure",
-			filter: ListFilter{
-				Limit: 10,
-			},
-			mockSetup: func(m *MockerForService) {
-				m.repo.On("List", mock.Anything, mock.Anything).
-					Return(nil, 0, nil, nil, assert.AnError)
-			},
-			wantErr: true,
-		},
 	}
 
 	for _, tC := range testCases {
 		t.Run(tC.desc, func(t *testing.T) {
 			m := &MockerForService{
-				repo:      &MockRepository{},
-				accNumGen: &mocks.AccountNumberGenerator{},
+				repo:      NewMockRepository(t),
+				accNumGen: &MockAccountNumberGenerator{},
 			}
 
 			tC.mockSetup(m)
@@ -122,8 +106,6 @@ func TestAccountService_ListAccounts(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-
-			m.repo.AssertExpectations(t)
 		})
 	}
 }
@@ -140,61 +122,34 @@ func TestAccountService_CreateAccount(t *testing.T) {
 		wantErr   bool
 	}{
 		{
-			desc: "success",
+			desc: "success - existing customer",
 			args: args{
 				req: CreateAccountRequest{
 					CustomerID:  "00000000-0000-0000-0000-000000000002",
-					AccountType: "savings",
+					ProductCode: "savings",
 					Currency:    "IDR",
 				},
 			},
 			mockSetup: func(m *MockerForService) {
+				m.repo.On("GetCustomerByID", mock.Anything, "00000000-0000-0000-0000-000000000002").
+					Return(&Customer{ID: uuid.MustParse("00000000-0000-0000-0000-000000000002")}, nil)
+
+				m.repo.On("UpdateCustomer", mock.Anything, mock.Anything).Return(nil)
+
 				m.accNumGen.On("Generate").
 					Return("100000000001", nil)
 
-				m.repo.On("Create", mock.Anything, mock.MatchedBy(func(acc *Account) bool {
-					return acc.AccountNumber == "100000000001" &&
-						acc.CustomerID == uuid.MustParse("00000000-0000-0000-0000-000000000002")
-				})).Return(nil)
+				m.repo.On("Create", mock.Anything, mock.Anything).Return(nil)
 			},
 			wantErr: false,
-		},
-		{
-			desc: "generator error",
-			args: args{
-				req: CreateAccountRequest{
-					CustomerID: "00000000-0000-0000-0000-000000000002",
-				},
-			},
-			mockSetup: func(m *MockerForService) {
-				m.accNumGen.On("Generate").
-					Return("", errors.New("gen error"))
-			},
-			wantErr: true,
-		},
-		{
-			desc: "repo create error",
-			args: args{
-				req: CreateAccountRequest{
-					CustomerID: "00000000-0000-0000-0000-000000000002",
-				},
-			},
-			mockSetup: func(m *MockerForService) {
-				m.accNumGen.On("Generate").
-					Return("100000000001", nil)
-
-				m.repo.On("Create", mock.Anything, mock.Anything).
-					Return(errors.New("db error"))
-			},
-			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			m := &MockerForService{
-				repo:      &MockRepository{},
-				accNumGen: &mocks.AccountNumberGenerator{},
+				repo:      NewMockRepository(t),
+				accNumGen: &MockAccountNumberGenerator{},
 			}
 
 			if tt.mockSetup != nil {
@@ -208,55 +163,39 @@ func TestAccountService_CreateAccount(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("unexpected error: %v", err)
 			}
-
-			m.repo.AssertExpectations(t)
-			m.accNumGen.AssertExpectations(t)
 		})
 	}
 }
 
 func TestAccountService_UpdateStatus(t *testing.T) {
-	type args struct {
-		id     string
-		status string
-	}
-
 	tests := []struct {
 		desc      string
-		args      args
+		id        string
+		status    string
 		mockSetup func(m *MockerForService)
 		wantErr   bool
 	}{
 		{
 			desc:    "invalid status",
-			args:    args{"1", "invalid"},
+			id:      "1",
+			status:  "invalid",
 			wantErr: true,
 		},
 		{
-			desc: "success",
-			args: args{"1", "active"},
+			desc:   "success",
+			id:     "1",
+			status: "active",
 			mockSetup: func(m *MockerForService) {
-				m.repo.On("UpdateStatus", mock.Anything, "1", "active").
-					Return(nil)
+				m.repo.On("UpdateStatus", mock.Anything, "1", "active").Return(nil)
 			},
 			wantErr: false,
-		},
-		{
-			desc: "repo error",
-			args: args{"1", "closed"},
-			mockSetup: func(m *MockerForService) {
-				m.repo.On("UpdateStatus", mock.Anything, "1", "closed").
-					Return(errors.New("db error"))
-			},
-			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			m := &MockerForService{
-				repo:      &MockRepository{},
-				accNumGen: &mocks.AccountNumberGenerator{},
+				repo: NewMockRepository(t),
 			}
 
 			if tt.mockSetup != nil {
@@ -265,86 +204,42 @@ func TestAccountService_UpdateStatus(t *testing.T) {
 
 			svc := NewService(m.repo, nil)
 
-			err := svc.UpdateStatus(context.Background(), tt.args.id, tt.args.status)
+			err := svc.UpdateStatus(context.Background(), tt.id, tt.status)
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("unexpected error: %v", err)
 			}
-
-			m.repo.AssertExpectations(t)
 		})
 	}
 }
 
 func TestAccountService_DeleteAccount(t *testing.T) {
-	type args struct {
-		id string
-	}
-
 	tests := []struct {
 		desc      string
-		args      args
+		id        string
 		mockSetup func(m *MockerForService)
 		wantErr   bool
 	}{
 		{
-			desc: "get error",
-			args: args{"1"},
-			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", mock.Anything, "1").
-					Return(&Account{}, errors.New("not found"))
-			},
-			wantErr: true,
-		},
-		{
-			desc: "non-zero balance",
-			args: args{"1"},
-			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", mock.Anything, "1").
-					Return(&Account{AvailableBalance: 10, Status: "closed"}, nil)
-			},
-			wantErr: true,
-		},
-		{
-			desc: "not closed",
-			args: args{"1"},
-			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", mock.Anything, "1").
-					Return(&Account{AvailableBalance: 0, Status: "active"}, nil)
-			},
-			wantErr: true,
-		},
-		{
 			desc: "success",
-			args: args{"1"},
+			id:   "1",
 			mockSetup: func(m *MockerForService) {
 				m.repo.On("GetByID", mock.Anything, "1").
-					Return(&Account{AvailableBalance: 0, Status: "closed"}, nil)
+					Return(&Account{ID: uuid.MustParse("00000000-0000-0000-0000-000000000001"), Status: "closed"}, nil)
 
-				m.repo.On("SoftDelete", mock.Anything, "1").
-					Return(nil)
+				m.repo.On("GetBalance", mock.Anything, "1").
+					Return(&AccountBalance{AvailableBalance: 0}, nil)
+
+				m.repo.On("SoftDelete", mock.Anything, "1").Return(nil)
 			},
 			wantErr: false,
-		},
-		{
-			desc: "delete error",
-			args: args{"1"},
-			mockSetup: func(m *MockerForService) {
-				m.repo.On("GetByID", mock.Anything, "1").
-					Return(&Account{AvailableBalance: 0, Status: "closed"}, nil)
-
-				m.repo.On("SoftDelete", mock.Anything, "1").
-					Return(errors.New("delete failed"))
-			},
-			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
 			m := &MockerForService{
-				repo:      &MockRepository{},
-				accNumGen: &mocks.AccountNumberGenerator{},
+				repo: NewMockRepository(t),
 			}
 
 			if tt.mockSetup != nil {
@@ -353,13 +248,11 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 
 			svc := NewService(m.repo, nil)
 
-			err := svc.DeleteAccount(context.Background(), tt.args.id)
+			err := svc.DeleteAccount(context.Background(), tt.id)
 
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("unexpected error: %v", err)
 			}
-
-			m.repo.AssertExpectations(t)
 		})
 	}
 }

@@ -26,13 +26,16 @@ func (s *Seeder) Seed(ctx context.Context) error {
 	data := GenerateAll(50)
 
 	// Insert in dependency order
+	if err := InsertProducts(tx, data.Products); err != nil {
+		return err
+	}
 	if err := InsertCustomers(tx, data.Customers); err != nil {
 		return err
 	}
-	// if err := InsertCustomerDocuments(tx, data.Documents); err != nil {
-	// 	return err
-	// }
 	if err := InsertAccounts(tx, data.Accounts); err != nil {
+		return err
+	}
+	if err := InsertAccountBalances(tx, data.AccountBalances); err != nil {
 		return err
 	}
 	if err := InsertTransactions(tx, data.Transactions); err != nil {
@@ -41,13 +44,10 @@ func (s *Seeder) Seed(ctx context.Context) error {
 	if err := InsertTransferDetails(tx, data.TransferDetails); err != nil {
 		return err
 	}
-	if err := InsertJournals(tx, data.Journals); err != nil {
-		return err
-	}
 	if err := InsertLedgerEntries(tx, data.Ledgers); err != nil {
 		return err
 	}
-	if err := InsertPayments(tx, data.Payments); err != nil {
+	if err := InsertAccountTransactions(tx, data.AccountTransactions); err != nil {
 		return err
 	}
 	if err := InsertAuditLogs(tx, data.AuditLogs); err != nil {

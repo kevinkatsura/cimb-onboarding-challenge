@@ -4,6 +4,7 @@ import (
 	"context"
 	"core-banking/pkg/pagination"
 
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -16,12 +17,12 @@ type Repository interface {
 
 	// Account locking + retrieval
 	GetSenderForUpdate(ctx context.Context, accountID string) (SenderAccount, error)
-	LockReceiver(ctx context.Context, accountID string) error
+	LockReceiver(ctx context.Context, accountID string) (uuid.UUID, error)
 
 	// Write operations
 	InsertTransaction(ctx context.Context, p InsertTransactionParams) (string, error)
-	InsertJournal(ctx context.Context, txID string) (string, error)
 	InsertLedger(ctx context.Context, p InsertLedgerParams) error
+	InsertAccountTransaction(ctx context.Context, p AccountTransaction) error
 	DebitAccount(ctx context.Context, accountID string, amount int64) error
 	CreditAccount(ctx context.Context, accountID string, amount int64) error
 	CompleteTransaction(ctx context.Context, txID string) error
