@@ -15,9 +15,12 @@ import (
 	"core-banking/pkg/idgen"
 	"core-banking/pkg/lock"
 	"core-banking/pkg/logging"
+	"core-banking/pkg/messaging"
 	"core-banking/pkg/telemetry"
 	"net/http"
+	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -52,12 +55,20 @@ func main() {
 	redisClient := database.NewRedis(redisCfg)
 	defer database.CloseRedis(redisClient)
 
+	// ---- Messaging ----
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokers == "" {
+		kafkaBrokers = "localhost:9092"
+	}
+	producer := messaging.NewKafkaProducer(strings.Split(kafkaBrokers, ","), logger)
+	defer producer.Close()
+
 	// ---- Dependency Injection ----
 	lockManager := lock.NewAccountLockManager()
 
 	txRepo := transaction.NewRepository(db)
 	auditSvc := transaction.NewAuditService(txRepo)
-	txService := transaction.NewService(txRepo, lockManager, auditSvc)
+	txService := transaction.NewService(txRepo, lockManager, auditSvc, producer)
 	txH := transaction.NewHandler(txService)
 
 	accountRepo := account.NewRepository(db)

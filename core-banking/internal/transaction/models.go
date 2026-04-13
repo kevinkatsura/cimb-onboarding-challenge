@@ -21,6 +21,18 @@ type Transaction struct {
 	CompletedAt        *time.Time `db:"completed_at" json:"completedAt,omitempty"`
 }
 
+type TransactionCompletedEvent struct {
+	TransactionID        string `json:"transactionId"`
+	PartnerReferenceNo   string `json:"partnerReferenceNo"`
+	ReferenceNo          string `json:"referenceNo"`
+	SourceAccountNo      string `json:"sourceAccountNo"`
+	BeneficiaryAccountNo string `json:"beneficiaryAccountNo"`
+	Amount               int64  `json:"amount"`
+	Currency             string `json:"currency"`
+	Status               string `json:"status"`
+	CompletedAt          string `json:"completedAt"`
+}
+
 type TransferDetail struct {
 	ID                     uuid.UUID  `db:"id" json:"id"`
 	TransactionID          uuid.UUID  `db:"transaction_id" json:"transactionId"`

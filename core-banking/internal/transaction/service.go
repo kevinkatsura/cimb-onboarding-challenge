@@ -10,6 +10,8 @@ import (
 	"core-banking/internal/snap"
 	"core-banking/pkg/apperror"
 	"core-banking/pkg/lock"
+	"core-banking/pkg/logging"
+	"core-banking/pkg/messaging"
 	"core-banking/pkg/pagination"
 	"core-banking/pkg/telemetry"
 	"core-banking/pkg/util"
@@ -52,14 +54,16 @@ type Service struct {
 	repo         Repository
 	lockManager  lock.LockManager
 	auditService *AuditService
+	producer     messaging.Producer
 	delay        func()
 }
 
-func NewService(repo Repository, lockManager lock.LockManager, audit *AuditService) *Service {
+func NewService(repo Repository, lockManager lock.LockManager, audit *AuditService, producer messaging.Producer) *Service {
 	return &Service{
 		repo:         repo,
 		lockManager:  lockManager,
 		auditService: audit,
+		producer:     producer,
 		delay: func() {
 			time.Sleep(time.Duration(rand.Intn(5)+1) * time.Second)
 		},
@@ -250,7 +254,20 @@ func (s *Service) Transfer(ctx context.Context, req IntrabankTransferRequest) (*
 		return nil, apperror.NewInternal("failed to complete transaction", err)
 	}
 
-	// 8. Commit Transaction
+	// 8. Publish Event
+	go s.publishTransactionCompleted(ctx, TransactionCompletedEvent{
+		TransactionID:        txID,
+		PartnerReferenceNo:   req.PartnerReferenceNo,
+		ReferenceNo:          txID,
+		SourceAccountNo:      req.SourceAccountNo,
+		BeneficiaryAccountNo: req.BeneficiaryAccountNo,
+		Amount:               parsedAmount,
+		Currency:             req.Amount.Currency,
+		Status:               "completed",
+		CompletedAt:          time.Now().Format(time.RFC3339),
+	})
+
+	// 9. Commit Transaction
 	if dbTx != nil {
 		if err := dbTx.Commit(); err != nil {
 			span.RecordError(err)
@@ -393,5 +410,19 @@ func validateFeeType(feeType string) error {
 		return nil
 	default:
 		return apperror.NewBadRequest("invalid feeType, must be 'OUR', 'BEN', or 'SHA'")
+	}
+}
+
+func (s *Service) publishTransactionCompleted(ctx context.Context, event TransactionCompletedEvent) {
+	// Use background context to ensure it completes even if request ctx is cancelled
+	pubCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := s.producer.Publish(pubCtx, "transaction-completed", event.TransactionID, event)
+	if err != nil {
+		logging.Logger().Errorw("failed to publish transaction completed event",
+			"transactionId", event.TransactionID,
+			"error", err,
+		)
 	}
 }
