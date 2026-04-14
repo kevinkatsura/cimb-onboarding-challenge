@@ -53,7 +53,7 @@ func TestAccountService_GetAccount(t *testing.T) {
 
 			tC.mockSetup(m)
 
-			svc := NewService(m.repo, m.accNumGen)
+			svc := NewService(m.repo, m.accNumGen, nil)
 
 			res, err := svc.GetAccount(context.Background(), tC.inputID)
 
@@ -97,7 +97,7 @@ func TestAccountService_ListAccounts(t *testing.T) {
 
 			tC.mockSetup(m)
 
-			svc := NewService(m.repo, m.accNumGen)
+			svc := NewService(m.repo, m.accNumGen, nil)
 
 			_, _, _, _, err := svc.ListAccounts(context.Background(), tC.filter)
 
@@ -156,7 +156,7 @@ func TestAccountService_CreateAccount(t *testing.T) {
 				tt.mockSetup(m)
 			}
 
-			svc := NewService(m.repo, m.accNumGen)
+			svc := NewService(m.repo, m.accNumGen, nil)
 
 			_, err := svc.CreateAccount(context.Background(), tt.args.req)
 
@@ -202,7 +202,7 @@ func TestAccountService_UpdateStatus(t *testing.T) {
 				tt.mockSetup(m)
 			}
 
-			svc := NewService(m.repo, nil)
+			svc := NewService(m.repo, nil, nil)
 
 			err := svc.UpdateStatus(context.Background(), tt.id, tt.status)
 
@@ -246,7 +246,7 @@ func TestAccountService_DeleteAccount(t *testing.T) {
 				tt.mockSetup(m)
 			}
 
-			svc := NewService(m.repo, nil)
+			svc := NewService(m.repo, nil, nil)
 
 			err := svc.DeleteAccount(context.Background(), tt.id)
 

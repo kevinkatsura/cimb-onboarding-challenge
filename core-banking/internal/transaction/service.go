@@ -255,7 +255,7 @@ func (s *Service) Transfer(ctx context.Context, req IntrabankTransferRequest) (*
 	}
 
 	// 8. Publish Event
-	go s.publishTransactionCompleted(ctx, TransactionCompletedEvent{
+	s.publishTransactionCompleted(ctx, TransactionCompletedEvent{
 		TransactionID:        txID,
 		PartnerReferenceNo:   req.PartnerReferenceNo,
 		ReferenceNo:          txID,
@@ -297,7 +297,6 @@ func (s *Service) Transfer(ctx context.Context, req IntrabankTransferRequest) (*
 		TraceNo:            &txID,
 	}
 
-	// Internal Audit Logging (Improvement 3)
 	s.auditService.Log(ctx, "transfer_success", "transaction", txID, nil)
 
 	// Cache For Idempotency (Success only)
@@ -414,11 +413,7 @@ func validateFeeType(feeType string) error {
 }
 
 func (s *Service) publishTransactionCompleted(ctx context.Context, event TransactionCompletedEvent) {
-	// Use background context to ensure it completes even if request ctx is cancelled
-	pubCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	err := s.producer.Publish(pubCtx, "transaction-completed", event.TransactionID, event)
+	err := s.producer.Publish(ctx, "transaction-completed", event.TransactionID, event)
 	if err != nil {
 		logging.Logger().Errorw("failed to publish transaction completed event",
 			"transactionId", event.TransactionID,

@@ -72,7 +72,7 @@ func main() {
 	txH := transaction.NewHandler(txService)
 
 	accountRepo := account.NewRepository(db)
-	accountService := account.NewService(accountRepo, &idgen.RandomAccountNumberGenerator{})
+	accountService := account.NewService(accountRepo, &idgen.RandomAccountNumberGenerator{}, producer)
 	accountService.SetRedisClient(redisClient)
 	accountH := account.NewHandler(accountService)
 

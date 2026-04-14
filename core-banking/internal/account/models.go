@@ -113,3 +113,12 @@ type ListFilter struct {
 	Cursor      *pagination.Cursor
 	Direction   string
 }
+
+type AccountCreatedEvent struct {
+	AccountID     string `json:"accountId"`
+	CustomerID    string `json:"customerId"`
+	AccountNumber string `json:"accountNumber"`
+	ProductCode   string `json:"productCode"`
+	Currency      string `json:"currency"`
+	CreatedAt     string `json:"createdAt"`
+}

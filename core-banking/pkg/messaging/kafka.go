@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"core-banking/pkg/logging"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -25,9 +26,8 @@ func NewKafkaProducer(brokers []string, logger *zap.Logger) *KafkaProducer {
 		Addr:                   kafka.TCP(brokers...),
 		Balancer:               &kafka.LeastBytes{},
 		BatchTimeout:           10 * time.Millisecond,
-		Async:                  false,
+		Async:                  true,
 		AllowAutoTopicCreation: true,
-		RequiredAcks:           kafka.RequireOne,
 		MaxAttempts:            25,
 		WriteTimeout:           10 * time.Second,
 		ReadTimeout:            10 * time.Second,
@@ -51,65 +51,20 @@ func (p *KafkaProducer) Publish(ctx context.Context, topic string, key string, v
 		Value: payload,
 	}
 
-	// Manual retry loop for specific transient errors like LeaderNotAvailable
-	var lastErr error
-	maxRetries := 5
-	backoff := 500 * time.Millisecond
-
-	for i := 0; i < maxRetries; i++ {
-		err = p.writer.WriteMessages(ctx, msg)
-		if err == nil {
-			p.logger.Debug("message published to kafka",
-				zap.String("topic", topic),
-				zap.Int("attempt", i+1),
-			)
-			return nil
-		}
-
-		lastErr = err
-		// Check for specific transient errors (code 3: Unknown Topic, code 5: Leader Not Available)
-		if isRetryableError(err) {
-			p.logger.Warn("kafka transient error, retrying...",
-				zap.Int("attempt", i+1),
-				zap.String("topic", topic),
-				zap.Error(err),
-			)
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(backoff):
-				backoff *= 2 // Exponential backoff
-				continue
-			}
-		}
-
-		// If it's not a retryable error, or we exhausted retries, break and log
-		break
+	err = p.writer.WriteMessages(ctx, msg)
+	if err != nil {
+		p.logger.Error("failed to publish message to kafka",
+			zap.String("topic", topic),
+			zap.String("key", key),
+			zap.Error(err),
+		)
+		return err
 	}
 
-	p.logger.Error("failed to publish message to kafka after retries",
+	logging.Logger().Infow("message published to kafka",
 		zap.String("topic", topic),
-		zap.String("key", key),
-		zap.Error(lastErr),
 	)
-	return lastErr
-}
-
-func isRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	errStr := fmt.Sprintf("%v", err)
-	if errStr == "Leader Not Available" || errStr == "Unknown Topic Or Partition" {
-		return true
-	}
-
-	if kerr, ok := err.(kafka.Error); ok {
-		return kerr == kafka.LeaderNotAvailable || kerr == kafka.UnknownTopicOrPartition
-	}
-
-	return false
+	return nil
 }
 
 func (p *KafkaProducer) Close() error {

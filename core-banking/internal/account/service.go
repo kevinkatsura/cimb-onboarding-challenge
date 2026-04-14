@@ -6,6 +6,8 @@ import (
 
 	"core-banking/pkg/apperror"
 	"core-banking/pkg/idgen"
+	"core-banking/pkg/logging"
+	"core-banking/pkg/messaging"
 	"core-banking/pkg/pagination"
 	"core-banking/pkg/telemetry"
 	"fmt"
@@ -38,13 +40,15 @@ func init() {
 type Service struct {
 	repo      Repository
 	accNumGen idgen.AccountNumberGenerator
+	producer  messaging.Producer
 	cache     *RedisCache
 }
 
-func NewService(repo Repository, accNumGen idgen.AccountNumberGenerator) *Service {
+func NewService(repo Repository, accNumGen idgen.AccountNumberGenerator, producer messaging.Producer) *Service {
 	return &Service{
 		repo:      repo,
 		accNumGen: accNumGen,
+		producer:  producer,
 		cache:     nil,
 	}
 }
@@ -198,7 +202,30 @@ func (s *Service) CreateAccount(ctx context.Context, req CreateAccountRequest) (
 	))
 
 	span.SetStatus(codes.Ok, "account created")
+
+	// Broadcast creation event
+	s.publishAccountCreated(ctx, &acc)
+
 	return &acc, nil
+}
+
+func (s *Service) publishAccountCreated(ctx context.Context, acc *Account) {
+	event := AccountCreatedEvent{
+		AccountID:     acc.ID.String(),
+		CustomerID:    acc.CustomerID.String(),
+		AccountNumber: acc.AccountNumber,
+		ProductCode:   acc.ProductCode,
+		Currency:      acc.Currency,
+		CreatedAt:     acc.CreatedAt.Format(time.RFC3339),
+	}
+
+	err := s.producer.Publish(ctx, "account-created", acc.ID.String(), event)
+	if err != nil {
+		logging.Logger().Errorw("failed to publish account created event",
+			"accountId", acc.ID.String(),
+			"error", err,
+		)
+	}
 }
 
 func (s *Service) GetAccount(ctx context.Context, id string) (*Account, error) {
