@@ -1,0 +1,251 @@
+services:
+  # ─────────────────────────────────────────────
+  #  Data Stores
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: pjp_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: pjp_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  #  Messaging
+  # ─────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: pjp_kafka
+    ports:
+      - "${KAFKA_EXTERNAL_PORT}:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:${KAFKA_EXTERNAL_PORT}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_LOG_RETENTION_HOURS: 168
+      CLUSTER_ID: "UEpQQ2x1c3RlcjIwMjYK"
+    volumes:
+      - kafkadata:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: pjp_kafka_ui
+    ports:
+      - "${KAFKA_UI_PORT}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: pjp-kraft
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ─────────────────────────────────────────────
+  #  Observability
+  # ─────────────────────────────────────────────
+  tempo:
+    image: grafana/tempo:2.4.1
+    container_name: pjp_tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo.yaml:ro
+      - tempodata:/var/tempo
+    ports:
+      - "${TEMPO_PORT}:3200"
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: pjp_loki
+    command: ["-config.file=/etc/loki/loki-config.yaml"]
+    volumes:
+      - ./observability/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - lokidata:/loki/data
+    ports:
+      - "${LOKI_PORT}:3100"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: pjp_grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafanadata:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT}:3000"
+    depends_on:
+      - tempo
+      - loki
+
+  # ─────────────────────────────────────────────
+  #  Application Services
+  # ─────────────────────────────────────────────
+  core-banking-system:
+    build:
+      context: ./core-banking-system
+      dockerfile: Dockerfile
+    container_name: pjp_core_banking
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${CBS_GRPC_PORT}:50052"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_SSLMODE: ${DB_SSLMODE}
+      GRPC_PORT: ":50052"
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      LOKI_URL: http://loki:3100/loki/api/v1/push
+    restart: unless-stopped
+
+  account-issuance:
+    build:
+      context: ./account-issuance-service
+      dockerfile: Dockerfile
+    container_name: pjp_account_issuance
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      core-banking-system:
+        condition: service_started
+    ports:
+      - "${AIS_HTTP_PORT}:8080"
+      - "${AIS_GRPC_PORT}:50051"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_SSLMODE: ${DB_SSLMODE}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      KAFKA_BROKERS: "kafka:29092"
+      CBS_GRPC_ADDR: "core-banking-system:50052"
+      GRPC_PORT: ":50051"
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      LOKI_URL: http://loki:3100/loki/api/v1/push
+    restart: unless-stopped
+
+  payment-initiation:
+    build:
+      context: ./payment-initiation-acquiring-service
+      dockerfile: Dockerfile
+    container_name: pjp_payment_initiation
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      account-issuance:
+        condition: service_started
+      core-banking-system:
+        condition: service_started
+    ports:
+      - "${PIAS_HTTP_PORT}:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_SSLMODE: ${DB_SSLMODE}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      KAFKA_BROKERS: "kafka:29092"
+      AIS_GRPC_ADDR: "account-issuance:50051"
+      CBS_GRPC_ADDR: "core-banking-system:50052"
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      LOKI_URL: http://loki:3100/loki/api/v1/push
+    restart: unless-stopped
+
+  notification:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: pjp_notification
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    ports:
+      - "${NS_HTTP_PORT}:8080"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_SSLMODE: ${DB_SSLMODE}
+      KAFKA_BROKERS: "kafka:29092"
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      LOKI_URL: http://loki:3100/loki/api/v1/push
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+    name: pjp_pgdata
+  redisdata:
+    name: pjp_redisdata
+  kafkadata:
+    name: pjp_kafkadata
+  tempodata:
+    name: pjp_tempodata
+  lokidata:
+    name: pjp_lokidata
+  grafanadata:
+    name: pjp_grafanadata
