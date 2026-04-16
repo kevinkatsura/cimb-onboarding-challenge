@@ -1,6 +1,4 @@
 -- Account Issuance schema
-CREATE SCHEMA IF NOT EXISTS account_issuance;
-SET search_path TO account_issuance;
 
 CREATE TABLE customers (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -12,7 +12,7 @@ import (
 )
 
 func NewPostgres(cfg *config.DBConfig) *sqlx.DB {
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s search_path=account_issuance,public",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name, cfg.SSLMode)
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -42,5 +42,15 @@ func EnsureDatabase(cfg *config.DBConfig) {
 	if !exists {
 		_, _ = db.Exec(fmt.Sprintf("CREATE DATABASE %s", cfg.Name))
 		logging.Logger().Infow("Database created", "name", cfg.Name)
+	}
+
+	// Ensure Schema
+	dsnDB := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name, cfg.SSLMode)
+	dbDB, err := sql.Open("pgx", dsnDB)
+	if err == nil {
+		defer dbDB.Close()
+		_, _ = dbDB.Exec("CREATE SCHEMA IF NOT EXISTS account_issuance")
+		logging.Logger().Infow("Schema ensured", "schema", "account_issuance")
 	}
 }

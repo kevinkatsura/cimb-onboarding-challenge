@@ -21,17 +21,17 @@ func NewAccountServiceServer(svc *account.Service) *AccountServiceServer {
 }
 
 type GetAccountRequest struct {
-	AccountNumber string
+	AccountNumber string `json:"accountNumber" example:"80202604160001"`
 }
 
 type GetAccountResponse struct {
-	AccountID        string
-	CustomerID       string
-	AccountNumber    string
-	ProductCode      string
-	Currency         string
-	Status           string
-	AvailableBalance int64
+	AccountID        string `json:"accountId" example:"uuid-acc-123"`
+	CustomerID       string `json:"customerId" example:"uuid-cust-456"`
+	AccountNumber    string `json:"accountNumber" example:"80202604160001"`
+	ProductCode      string `json:"productCode" example:"savings"`
+	Currency         string `json:"currency" example:"IDR"`
+	Status           string `json:"status" example:"active"`
+	AvailableBalance int64  `json:"availableBalance" example:"1500000"`
 }
 
 func (s *AccountServiceServer) GetAccount(ctx context.Context, req *GetAccountRequest) (*GetAccountResponse, error) {
@@ -43,6 +43,7 @@ func (s *AccountServiceServer) GetAccount(ctx context.Context, req *GetAccountRe
 
 	acc, bal, err := s.svc.GetAccountByNumber(ctx, req.AccountNumber)
 	if err != nil {
+		logging.Ctx(ctx).Warnw("gRPC GetAccount: account not found in DB", "account_number", req.AccountNumber)
 		return nil, status.Error(codes.NotFound, "account not found")
 	}
 
