@@ -1,6 +1,4 @@
 -- Notification schema
-CREATE SCHEMA IF NOT EXISTS notification;
-SET search_path TO notification;
 
 CREATE TABLE notifications (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),

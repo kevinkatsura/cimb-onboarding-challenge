@@ -1,7 +1,10 @@
 package logging
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -25,7 +28,34 @@ func NewLokiSyncer(url string, labels map[string]string) *LokiSyncer {
 }
 
 func (l *LokiSyncer) Write(p []byte) (int, error) {
-	// Best-effort push; errors don't block the application
+	// Prepare Loki push payload
+	now := time.Now().UnixNano()
+	payload := map[string]interface{}{
+		"streams": []map[string]interface{}{
+			{
+				"stream": l.labels,
+				"values": [][]string{
+					{fmt.Sprintf("%d", now), string(p)},
+				},
+			},
+		},
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return 0, err
+	}
+
+	resp, err := l.client.Post(l.url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return 0, fmt.Errorf("loki push failed with status: %d", resp.StatusCode)
+	}
+
 	return len(p), nil
 }
 

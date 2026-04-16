@@ -1,5 +1,10 @@
 package main
 
+// @title Notification Service API
+// @version 1.0
+// @description Kafka consumer and webhook delivery service (PJP)
+// @BasePath /
+
 import (
 	"context"
 	"net/http"
@@ -9,6 +14,7 @@ import (
 	"syscall"
 
 	"notification-service/config"
+	_ "notification-service/docs"
 	"notification-service/internal/consumer"
 	"notification-service/internal/notification"
 	"notification-service/internal/webhook"
@@ -17,6 +23,7 @@ import (
 	"notification-service/pkg/telemetry"
 
 	"github.com/segmentio/kafka-go"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 const defaultWebhookURL = "https://webhook.site/d8f3c0ee-ada4-4fb7-a8f3-3b82724505ff"
@@ -78,11 +85,19 @@ func main() {
 	// Health endpoint
 	go func() {
 		mux := http.NewServeMux()
+		// HealthCheck godoc
+		// @Summary      Service Health Check
+		// @Description  Returns the health status of the Notification service
+		// @Tags         System
+		// @Produce      json
+		// @Success      200 {object} map[string]string
+		// @Router       /health [get]
 		mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(200)
 			w.Write([]byte(`{"status":"ok"}`))
 		})
-		logging.Logger().Infow("health endpoint starting", "port", ":8080")
+		mux.Handle("GET /swagger/", httpSwagger.WrapHandler)
+		logging.Logger().Infow("health endpoint starting (health+swagger)", "port", ":8080")
 		http.ListenAndServe(":8080", mux)
 	}()
 
