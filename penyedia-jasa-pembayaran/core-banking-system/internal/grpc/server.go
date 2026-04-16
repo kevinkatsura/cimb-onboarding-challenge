@@ -25,30 +25,30 @@ func NewLedgerServiceServer(svc *journal.Service) *LedgerServiceServer {
 }
 
 type CreateJournalEntryRequest struct {
-	TransactionRef string
-	Description    string
-	Lines          []JournalLineRequest
+	TransactionRef string               `json:"transactionRef" example:"TX-123456"`
+	Description    string               `json:"description" example:"Transfer to Kevin"`
+	Lines          []JournalLineRequest `json:"lines"`
 }
 
 type JournalLineRequest struct {
-	AccountID string
-	Debit     int64
-	Credit    int64
-	Currency  string
+	AccountID string `json:"accountId" example:"ACC001"`
+	Debit     int64  `json:"debit" example:"100000"`
+	Credit    int64  `json:"credit" example:"0"`
+	Currency  string `json:"currency" example:"IDR"`
 }
 
 type CreateJournalEntryResponse struct {
-	JournalEntryID string
+	JournalEntryID string `json:"journalEntryId" example:"uuid-1234"`
 }
 
 type GetBalanceRequest struct {
-	AccountID string
+	AccountID string `json:"accountId" example:"ACC001"`
 }
 
 type GetBalanceResponse struct {
-	AccountID      string
-	CurrentBalance int64
-	Currency       string
+	AccountID      string `json:"accountId" example:"ACC001"`
+	CurrentBalance int64  `json:"currentBalance" example:"1000000"`
+	Currency       string `json:"currency" example:"IDR"`
 }
 
 type InitializeAccountRequest struct {

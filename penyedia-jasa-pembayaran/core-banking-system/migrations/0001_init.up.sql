@@ -1,6 +1,4 @@
 -- Ledger schema for Core Banking System (double-entry bookkeeping)
-CREATE SCHEMA IF NOT EXISTS ledger;
-SET search_path TO ledger;
 
 CREATE TABLE journal_entries (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

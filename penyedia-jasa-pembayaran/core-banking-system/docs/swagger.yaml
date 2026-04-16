@@ -1,0 +1,105 @@
+basePath: /
+definitions:
+  internal_grpc.CreateJournalEntryRequest:
+    properties:
+      description:
+        example: Transfer to Kevin
+        type: string
+      lines:
+        items:
+          $ref: '#/definitions/internal_grpc.JournalLineRequest'
+        type: array
+      transactionRef:
+        example: TX-123456
+        type: string
+    type: object
+  internal_grpc.CreateJournalEntryResponse:
+    properties:
+      journalEntryId:
+        example: uuid-1234
+        type: string
+    type: object
+  internal_grpc.GetBalanceRequest:
+    properties:
+      accountId:
+        example: ACC001
+        type: string
+    type: object
+  internal_grpc.GetBalanceResponse:
+    properties:
+      accountId:
+        example: ACC001
+        type: string
+      currency:
+        example: IDR
+        type: string
+      currentBalance:
+        example: 1000000
+        type: integer
+    type: object
+  internal_grpc.JournalLineRequest:
+    properties:
+      accountId:
+        example: ACC001
+        type: string
+      credit:
+        example: 0
+        type: integer
+      currency:
+        example: IDR
+        type: string
+      debit:
+        example: 100000
+        type: integer
+    type: object
+info:
+  contact: {}
+  description: Internal ledger and balance materialization service (PJP)
+  title: Core Banking System API
+  version: "1.0"
+paths:
+  /grpc/CreateJournalEntry:
+    post:
+      consumes:
+      - application/json
+      description: Create a double-entry journal posting via gRPC
+      parameters:
+      - description: Journal Entry Request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_grpc.CreateJournalEntryRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_grpc.CreateJournalEntryResponse'
+      summary: Create Journal Entry (gRPC)
+      tags:
+      - gRPC
+  /grpc/GetBalance:
+    post:
+      consumes:
+      - application/json
+      description: Get current ledger balance for an account via gRPC
+      parameters:
+      - description: Balance Request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_grpc.GetBalanceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_grpc.GetBalanceResponse'
+      summary: Get Account Balance (gRPC)
+      tags:
+      - gRPC
+swagger: "2.0"

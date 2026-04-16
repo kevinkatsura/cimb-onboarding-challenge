@@ -1,8 +1,14 @@
 package main
 
+// @title Core Banking System API
+// @version 1.0
+// @description Internal ledger and balance materialization service (PJP)
+// @BasePath /
+
 import (
 	"context"
 	"core-banking-system/config"
+	_ "core-banking-system/docs"
 	grpcserver "core-banking-system/internal/grpc"
 	"core-banking-system/internal/journal"
 	"core-banking-system/pkg/database"
@@ -10,10 +16,12 @@ import (
 	"core-banking-system/pkg/telemetry"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
+	httpSwagger "github.com/swaggo/http-swagger"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -67,6 +75,27 @@ func main() {
 		logging.Logger().Infow("gRPC server starting", "port", grpcPort)
 		if err := s.Serve(lis); err != nil {
 			logging.Logger().Fatalw("gRPC server error", "error", err)
+		}
+	}()
+
+	// HTTP Server for Health + Swagger
+	go func() {
+		mux := http.NewServeMux()
+		// HealthCheck godoc
+		// @Summary      Service Health Check
+		// @Description  Returns the health status of the CBS service
+		// @Tags         System
+		// @Produce      json
+		// @Success      200 {object} map[string]string
+		// @Router       /health [get]
+		mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"ok"}`))
+		})
+		mux.Handle("GET /swagger/", httpSwagger.WrapHandler)
+		logging.Logger().Infow("HTTP server starting (health+swagger)", "port", ":8080")
+		if err := http.ListenAndServe(":8080", mux); err != nil {
+			logging.Logger().Fatalw("HTTP server error", "error", err)
 		}
 	}()
 
