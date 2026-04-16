@@ -131,8 +131,8 @@ services:
   # ─────────────────────────────────────────────
   core-banking-system:
     build:
-      context: ./core-banking-system
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./core-banking-system/Dockerfile
     container_name: pjp_core_banking
     depends_on:
       postgres:
@@ -155,8 +155,8 @@ services:
 
   account-issuance:
     build:
-      context: ./account-issuance-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./account-issuance-service/Dockerfile
     container_name: pjp_account_issuance
     depends_on:
       postgres:
@@ -190,8 +190,8 @@ services:
 
   payment-initiation:
     build:
-      context: ./payment-initiation-acquiring-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./payment-initiation-acquiring-service/Dockerfile
     container_name: pjp_payment_initiation
     depends_on:
       postgres:
@@ -226,8 +226,8 @@ services:
 
   notification:
     build:
-      context: ./notification-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./notification-service/Dockerfile
     container_name: pjp_notification
     depends_on:
       postgres:

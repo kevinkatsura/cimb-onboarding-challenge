@@ -1,0 +1,9 @@
+go 1.25.6
+
+use (
+	./account-issuance-service
+	./core-banking-system
+	./notification-service
+	./payment-initiation-acquiring-service
+	./proto
+)

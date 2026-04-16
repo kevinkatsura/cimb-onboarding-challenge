@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package account.v1;
+
+option go_package = "proto/account/v1;accountpb";
+
+service AccountService {
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+}
+
+message GetAccountRequest {
+  string account_number = 1;
+}
+
+message GetAccountResponse {
+  string account_id        = 1;
+  string customer_id       = 2;
+  string account_number    = 3;
+  string product_code      = 4;
+  string currency         = 5;
+  string status           = 6;
+  int64  available_balance = 7;
+}
