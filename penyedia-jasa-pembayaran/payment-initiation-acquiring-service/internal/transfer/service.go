@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"payment-initiation-acquiring-service/pkg/apperror"
-	"payment-initiation-acquiring-service/pkg/grpcclient"
 	"payment-initiation-acquiring-service/pkg/logging"
 	"payment-initiation-acquiring-service/pkg/messaging"
 	"payment-initiation-acquiring-service/pkg/telemetry"
+
+	accountpb "proto/account/v1"
+	ledgerpb "proto/ledger/v1"
 
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
@@ -22,16 +24,16 @@ const idempotencyTTL = 24 * time.Hour
 
 type Service struct {
 	repo          Repository
-	accountClient *grpcclient.AccountClient
-	ledgerClient  *grpcclient.LedgerClient
+	accountClient accountpb.AccountServiceClient
+	ledgerClient  ledgerpb.LedgerServiceClient
 	producer      messaging.Producer
 	redis         *redis.Client
 }
 
 func NewService(
 	repo Repository,
-	accountClient *grpcclient.AccountClient,
-	ledgerClient *grpcclient.LedgerClient,
+	accountClient accountpb.AccountServiceClient,
+	ledgerClient ledgerpb.LedgerServiceClient,
 	producer messaging.Producer,
 	redisClient *redis.Client,
 ) *Service {
@@ -77,21 +79,21 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) (*TransferR
 	}
 
 	// 3. Validate accounts via gRPC
-	sourceAcc, err := s.accountClient.GetAccount(ctx, req.SourceAccount.AccountNo)
+	sourceAcc, err := s.accountClient.GetAccount(ctx, &accountpb.GetAccountRequest{AccountNumber: req.SourceAccount.AccountNo})
 	if err != nil {
 		logging.Ctx(ctx).Errorw("source account lookup failed", "account_no", req.SourceAccount.AccountNo, "error", err)
 		return nil, apperror.New(apperror.ErrNotFound, "source account not found")
 	}
-	if sourceAcc.Status != "active" {
+	if sourceAcc.GetStatus() != "active" {
 		return nil, apperror.NewBadRequest("source account is not active")
 	}
 
-	beneficiaryAcc, err := s.accountClient.GetAccount(ctx, req.BeneficiaryAccount.AccountNo)
+	beneficiaryAcc, err := s.accountClient.GetAccount(ctx, &accountpb.GetAccountRequest{AccountNumber: req.BeneficiaryAccount.AccountNo})
 	if err != nil {
 		logging.Ctx(ctx).Errorw("beneficiary account lookup failed", "account_no", req.BeneficiaryAccount.AccountNo, "error", err)
 		return nil, apperror.New(apperror.ErrNotFound, "beneficiary account not found")
 	}
-	if beneficiaryAcc.Status != "active" {
+	if beneficiaryAcc.GetStatus() != "active" {
 		return nil, apperror.NewBadRequest("beneficiary account is not active")
 	}
 
@@ -100,10 +102,11 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) (*TransferR
 	feeAmount := CalculateFee(amount)
 
 	// 5. Check sufficient balance (from ledger)
-	balance, err := s.ledgerClient.GetBalance(ctx, sourceAcc.AccountID)
+	lbResp, err := s.ledgerClient.GetBalance(ctx, &ledgerpb.GetBalanceRequest{AccountId: sourceAcc.GetAccountId()})
 	if err != nil {
 		logging.Ctx(ctx).Warnw("ledger balance check failed, proceeding", "error", err)
 	} else {
+		balance := lbResp.GetCurrentBalance()
 		totalDebit := amount
 		if feeType == "OUR" || feeType == "SHA" {
 			totalDebit += feeAmount
@@ -136,26 +139,30 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) (*TransferR
 		ID:                     uuid.New(),
 		TransactionID:          txID,
 		SourceAccountNo:        req.SourceAccount.AccountNo,
-		SourceAccountName:      sourceAcc.CustomerID,
+		SourceAccountName:      sourceAcc.GetCustomerId(),
 		BeneficiaryAccountNo:   req.BeneficiaryAccount.AccountNo,
-		BeneficiaryAccountName: beneficiaryAcc.CustomerID,
+		BeneficiaryAccountName: beneficiaryAcc.GetCustomerId(),
 	}
 	if err := s.repo.CreateTransferDetail(ctx, detail); err != nil {
 		return nil, apperror.NewInternal("failed to create transfer detail", err)
 	}
 
 	// 7. Post to ledger (double-entry)
-	lines := []grpcclient.JournalLine{
-		{AccountID: sourceAcc.AccountID, Debit: amount, Credit: 0, Currency: req.Amount.Currency},
-		{AccountID: beneficiaryAcc.AccountID, Debit: 0, Credit: amount, Currency: req.Amount.Currency},
+	lines := []*ledgerpb.JournalLine{
+		{AccountId: sourceAcc.GetAccountId(), Debit: amount, Credit: 0, Currency: req.Amount.Currency},
+		{AccountId: beneficiaryAcc.GetAccountId(), Debit: 0, Credit: amount, Currency: req.Amount.Currency},
 	}
 	if feeAmount > 0 {
 		lines = append(lines,
-			grpcclient.JournalLine{AccountID: sourceAcc.AccountID, Debit: feeAmount, Credit: 0, Currency: req.Amount.Currency},
-			grpcclient.JournalLine{AccountID: "FEE_REVENUE", Debit: 0, Credit: feeAmount, Currency: req.Amount.Currency},
+			&ledgerpb.JournalLine{AccountId: sourceAcc.GetAccountId(), Debit: feeAmount, Credit: 0, Currency: req.Amount.Currency},
+			&ledgerpb.JournalLine{AccountId: "FEE_REVENUE", Debit: 0, Credit: feeAmount, Currency: req.Amount.Currency},
 		)
 	}
-	_, err = s.ledgerClient.CreateJournalEntry(ctx, refNo, fmt.Sprintf("Transfer %s -> %s", req.SourceAccount.AccountNo, req.BeneficiaryAccount.AccountNo), lines)
+	_, err = s.ledgerClient.CreateJournalEntry(ctx, &ledgerpb.CreateJournalEntryRequest{
+		TransactionRef: refNo,
+		Description:    fmt.Sprintf("Transfer %s -> %s", req.SourceAccount.AccountNo, req.BeneficiaryAccount.AccountNo),
+		Lines:          lines,
+	})
 	if err != nil {
 		// Mark transaction as failed
 		_ = s.repo.UpdateTransactionStatus(ctx, txID, "failed")

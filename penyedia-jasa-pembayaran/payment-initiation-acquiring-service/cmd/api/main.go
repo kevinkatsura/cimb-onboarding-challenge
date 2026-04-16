@@ -18,10 +18,16 @@ import (
 	"payment-initiation-acquiring-service/internal/server"
 	"payment-initiation-acquiring-service/internal/transfer"
 	"payment-initiation-acquiring-service/pkg/database"
-	"payment-initiation-acquiring-service/pkg/grpcclient"
 	"payment-initiation-acquiring-service/pkg/logging"
 	"payment-initiation-acquiring-service/pkg/messaging"
 	"payment-initiation-acquiring-service/pkg/telemetry"
+
+	accountpb "proto/account/v1"
+	ledgerpb "proto/ledger/v1"
+
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 func main() {
@@ -59,21 +65,29 @@ func main() {
 	if aisAddr == "" {
 		aisAddr = "localhost:50051"
 	}
-	accountClient, err := grpcclient.NewAccountClient(aisAddr)
+	aisConn, err := grpc.NewClient(aisAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
 		logging.Logger().Fatalw("failed to connect to account service", "error", err)
 	}
-	defer accountClient.Close()
+	defer aisConn.Close()
+	accountClient := accountpb.NewAccountServiceClient(aisConn)
 
 	cbsAddr := os.Getenv("CBS_GRPC_ADDR")
 	if cbsAddr == "" {
 		cbsAddr = "localhost:50052"
 	}
-	ledgerClient, err := grpcclient.NewLedgerClient(cbsAddr)
+	cbsConn, err := grpc.NewClient(cbsAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
 		logging.Logger().Fatalw("failed to connect to CBS", "error", err)
 	}
-	defer ledgerClient.Close()
+	defer cbsConn.Close()
+	ledgerClient := ledgerpb.NewLedgerServiceClient(cbsConn)
 
 	// Domain
 	repo := transfer.NewRepository(db)
