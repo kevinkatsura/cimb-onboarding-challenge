@@ -1,10 +1,10 @@
 package database
 
 import (
-	"payment-initiation-acquiring-service/config"
-	"payment-initiation-acquiring-service/pkg/logging"
 	"database/sql"
 	"fmt"
+	"payment-initiation-acquiring-service/config"
+	"payment-initiation-acquiring-service/pkg/logging"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -12,7 +12,7 @@ import (
 )
 
 func NewPostgres(cfg *config.DBConfig) *sqlx.DB {
-	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s search_path=payment_initiation,public",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name, cfg.SSLMode)
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -42,5 +42,15 @@ func EnsureDatabase(cfg *config.DBConfig) {
 	if !exists {
 		_, _ = db.Exec(fmt.Sprintf("CREATE DATABASE %s", cfg.Name))
 		logging.Logger().Infow("Database created", "name", cfg.Name)
+	}
+
+	// Ensure Schema
+	dsnDB := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name, cfg.SSLMode)
+	dbDB, err := sql.Open("pgx", dsnDB)
+	if err == nil {
+		defer dbDB.Close()
+		_, _ = dbDB.Exec("CREATE SCHEMA IF NOT EXISTS payment_initiation")
+		logging.Logger().Infow("Schema ensured", "schema", "payment_initiation")
 	}
 }

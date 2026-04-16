@@ -46,7 +46,7 @@ func (c *AccountClient) GetAccount(ctx context.Context, accountNumber string) (*
 	// Manual gRPC invoke (proto stubs will replace this)
 	var resp AccountInfo
 	err := c.conn.Invoke(ctx, "/account.v1.AccountService/GetAccount",
-		&struct{ AccountNumber string }{AccountNumber: accountNumber}, &resp)
+		&struct{ AccountNumber string }{AccountNumber: accountNumber}, &resp, grpc.CallContentSubtype("json"))
 	if err != nil {
 		return nil, fmt.Errorf("account lookup failed: %w", err)
 	}
@@ -101,7 +101,7 @@ func (c *LedgerClient) CreateJournalEntry(ctx context.Context, transactionRef, d
 	}{TransactionRef: transactionRef, Description: description, Lines: lines}
 
 	var resp CreateJournalEntryResponse
-	err := c.conn.Invoke(ctx, "/ledger.v1.LedgerService/CreateJournalEntry", &req, &resp)
+	err := c.conn.Invoke(ctx, "/ledger.v1.LedgerService/CreateJournalEntry", &req, &resp, grpc.CallContentSubtype("json"))
 	if err != nil {
 		return "", fmt.Errorf("journal entry creation failed: %w", err)
 	}
@@ -114,7 +114,7 @@ func (c *LedgerClient) GetBalance(ctx context.Context, accountID string) (int64,
 
 	req := struct{ AccountID string }{AccountID: accountID}
 	var resp GetBalanceResponse
-	err := c.conn.Invoke(ctx, "/ledger.v1.LedgerService/GetBalance", &req, &resp)
+	err := c.conn.Invoke(ctx, "/ledger.v1.LedgerService/GetBalance", &req, &resp, grpc.CallContentSubtype("json"))
 	if err != nil {
 		return 0, err
 	}

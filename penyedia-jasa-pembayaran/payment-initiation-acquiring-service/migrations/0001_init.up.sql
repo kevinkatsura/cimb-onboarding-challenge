@@ -1,6 +1,4 @@
 -- Payment Initiation schema
-CREATE SCHEMA IF NOT EXISTS payment_initiation;
-SET search_path TO payment_initiation;
 
 CREATE TABLE transactions (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),

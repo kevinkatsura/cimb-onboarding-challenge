@@ -79,6 +79,7 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) (*TransferR
 	// 3. Validate accounts via gRPC
 	sourceAcc, err := s.accountClient.GetAccount(ctx, req.SourceAccount.AccountNo)
 	if err != nil {
+		logging.Ctx(ctx).Errorw("source account lookup failed", "account_no", req.SourceAccount.AccountNo, "error", err)
 		return nil, apperror.New(apperror.ErrNotFound, "source account not found")
 	}
 	if sourceAcc.Status != "active" {
@@ -87,6 +88,7 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) (*TransferR
 
 	beneficiaryAcc, err := s.accountClient.GetAccount(ctx, req.BeneficiaryAccount.AccountNo)
 	if err != nil {
+		logging.Ctx(ctx).Errorw("beneficiary account lookup failed", "account_no", req.BeneficiaryAccount.AccountNo, "error", err)
 		return nil, apperror.New(apperror.ErrNotFound, "beneficiary account not found")
 	}
 	if beneficiaryAcc.Status != "active" {

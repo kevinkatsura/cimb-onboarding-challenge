@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"os"
 
 	"payment-initiation-acquiring-service/pkg/logging"
 
@@ -17,7 +18,15 @@ import (
 var Tracer trace.Tracer
 
 func InitProvider(ctx context.Context, serviceName string) (func(context.Context) error, error) {
-	exporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithInsecure())
+	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if endpoint == "" {
+		endpoint = "localhost:4317"
+	}
+
+	exporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithEndpoint(endpoint),
+	)
 	if err != nil {
 		return nil, err
 	}
