@@ -15,7 +15,6 @@ import (
 	"account-issuance-service/pkg/messaging"
 	"account-issuance-service/pkg/telemetry"
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -27,6 +26,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+
+	accountpb "proto/account/v1"
 )
 
 func main() {
@@ -82,7 +83,9 @@ func main() {
 		grpcPort = ":50051"
 	}
 	s := grpc.NewServer(grpc.StatsHandler(otelgrpc.NewServerHandler()))
-	registerAccountService(s, grpcSvc)
+
+	// Import the generated PB package
+	accountpb.RegisterAccountServiceServer(s, grpcSvc)
 	reflection.Register(s)
 
 	lis, err := net.Listen("tcp", grpcPort)
@@ -107,26 +110,4 @@ func main() {
 	_ = httpSrv.Shutdown(shutdownCtx)
 	s.GracefulStop()
 	logging.Logger().Infow("servers stopped")
-}
-
-func registerAccountService(s *grpc.Server, srv *grpcserver.AccountServiceServer) {
-	desc := grpc.ServiceDesc{
-		ServiceName: "account.v1.AccountService",
-		HandlerType: (*interface{})(nil),
-		Methods: []grpc.MethodDesc{
-			{
-				MethodName: "GetAccount",
-				Handler: func(s interface{}, ctx context.Context, dec func(interface{}) error, _ grpc.UnaryServerInterceptor) (interface{}, error) {
-					req := &grpcserver.GetAccountRequest{}
-					if err := dec(req); err != nil {
-						return nil, err
-					}
-					return srv.GetAccount(ctx, req)
-				},
-			},
-		},
-		Streams: []grpc.StreamDesc{},
-	}
-	_ = fmt.Sprintf("registering %s", desc.ServiceName)
-	s.RegisterService(&desc, srv)
 }
