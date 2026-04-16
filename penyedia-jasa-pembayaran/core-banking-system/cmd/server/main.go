@@ -14,7 +14,6 @@ import (
 	"core-banking-system/pkg/database"
 	"core-banking-system/pkg/logging"
 	"core-banking-system/pkg/telemetry"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -25,6 +24,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
+
+	ledgerpb "proto/ledger/v1"
 )
 
 func main() {
@@ -62,8 +63,8 @@ func main() {
 	s := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 	)
-	// Register service manually (proto-generated code will replace this)
-	registerLedgerService(s, ledgerServer)
+
+	ledgerpb.RegisterLedgerServiceServer(s, ledgerServer)
 	reflection.Register(s)
 
 	lis, err := net.Listen("tcp", grpcPort)
@@ -107,49 +108,4 @@ func main() {
 	logging.Logger().Infow("shutdown signal received")
 	s.GracefulStop()
 	logging.Logger().Infow("gRPC server stopped")
-}
-
-// registerLedgerService registers the Ledger gRPC service.
-// This is a simplified registration. Once proto stubs are generated,
-// replace with: ledgerpb.RegisterLedgerServiceServer(s, ledgerServer)
-func registerLedgerService(s *grpc.Server, srv *grpcserver.LedgerServiceServer) {
-	desc := grpc.ServiceDesc{
-		ServiceName: "ledger.v1.LedgerService",
-		HandlerType: (*interface{})(nil),
-		Methods: []grpc.MethodDesc{
-			{
-				MethodName: "CreateJournalEntry",
-				Handler: func(s interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-					req := &grpcserver.CreateJournalEntryRequest{}
-					if err := dec(req); err != nil {
-						return nil, err
-					}
-					return srv.CreateJournalEntry(ctx, req)
-				},
-			},
-			{
-				MethodName: "GetBalance",
-				Handler: func(s interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-					req := &grpcserver.GetBalanceRequest{}
-					if err := dec(req); err != nil {
-						return nil, err
-					}
-					return srv.GetBalance(ctx, req)
-				},
-			},
-			{
-				MethodName: "InitializeAccount",
-				Handler: func(s interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-					req := &grpcserver.InitializeAccountRequest{}
-					if err := dec(req); err != nil {
-						return nil, err
-					}
-					return srv.InitializeAccount(ctx, req)
-				},
-			},
-		},
-		Streams: []grpc.StreamDesc{},
-	}
-	_ = fmt.Sprintf("registering %s", desc.ServiceName)
-	s.RegisterService(&desc, srv)
 }
