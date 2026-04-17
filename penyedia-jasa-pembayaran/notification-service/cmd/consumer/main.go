@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 
 	"notification-service/config"
@@ -35,11 +36,13 @@ func main() {
 	}
 	defer logger.Sync()
 
-	shutdown, err := telemetry.InitProvider(context.Background(), "notification-service")
+	bgCtx := context.Background()
+
+	shutdown, err := telemetry.InitProvider(bgCtx, "notification-service")
 	if err != nil {
 		logging.Logger().Fatalw("failed to init telemetry", "error", err)
 	}
-	defer func() { _ = shutdown(context.Background()) }()
+	defer func() { _ = shutdown(bgCtx) }()
 
 	cfg := config.LoadConfig()
 	db := database.NewPostgres(cfg)
@@ -79,7 +82,7 @@ func main() {
 		MaxBytes: 10e6,
 	})
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(bgCtx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	// Health endpoint
@@ -101,8 +104,12 @@ func main() {
 		http.ListenAndServe(":8080", mux)
 	}()
 
+	var wg sync.WaitGroup
+
 	// Consumer loops
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		logging.Logger().Infow("consuming topic", "topic", topics[0])
 		for {
 			msg, err := reader.FetchMessage(ctx)
@@ -113,12 +120,14 @@ func main() {
 				logging.Logger().Errorw("fetch error", "topic", topics[0], "error", err)
 				continue
 			}
-			handler.ProcessMessage(ctx, msg)
-			reader.CommitMessages(ctx, msg)
+			handler.ProcessMessage(bgCtx, msg)
+			reader.CommitMessages(bgCtx, msg)
 		}
 	}()
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		logging.Logger().Infow("consuming topic", "topic", topics[1])
 		for {
 			msg, err := reader2.FetchMessage(ctx)
@@ -129,8 +138,8 @@ func main() {
 				logging.Logger().Errorw("fetch error", "topic", topics[1], "error", err)
 				continue
 			}
-			handler.ProcessMessage(ctx, msg)
-			reader2.CommitMessages(ctx, msg)
+			handler.ProcessMessage(bgCtx, msg)
+			reader2.CommitMessages(bgCtx, msg)
 		}
 	}()
 
@@ -138,6 +147,7 @@ func main() {
 	<-ctx.Done()
 
 	logging.Logger().Infow("shutting down")
+	wg.Wait()
 	reader.Close()
 	reader2.Close()
 	logging.Logger().Infow("notification service stopped")

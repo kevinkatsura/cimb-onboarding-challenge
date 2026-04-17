@@ -35,12 +35,13 @@ func main() {
 	}
 	defer logger.Sync()
 
-	shutdown, err := telemetry.InitProvider(context.Background(), "core-banking-system")
+	bgCtx := context.Background()
+	shutdown, err := telemetry.InitProvider(bgCtx, "core-banking-system")
 	if err != nil {
 		logging.Logger().Fatalw("failed to init telemetry", "error", err)
 	}
 	defer func() {
-		if err := shutdown(context.Background()); err != nil {
+		if err := shutdown(bgCtx); err != nil {
 			logging.Logger().Errorw("telemetry shutdown error", "error", err)
 		}
 	}()
@@ -101,7 +102,7 @@ func main() {
 	}()
 
 	// Graceful shutdown
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(bgCtx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	<-ctx.Done()
 

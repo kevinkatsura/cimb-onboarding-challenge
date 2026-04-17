@@ -27,7 +27,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, id uuid.UUID, status stri
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE notification.notifications
 		 SET status = $1, response_code = $2, response_body = $3, attempts = attempts + 1,
-		     sent_at = CASE WHEN $1 = 'sent' THEN NOW() ELSE sent_at END,
+		     sent_at = CASE WHEN $1::varchar = 'sent' THEN NOW() ELSE sent_at END,
 		     id = id
 		 WHERE id = $4`, status, responseCode, responseBody, id)
 	return err

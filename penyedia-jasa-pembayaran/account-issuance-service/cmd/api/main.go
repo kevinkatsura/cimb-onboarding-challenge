@@ -37,11 +37,12 @@ func main() {
 	}
 	defer logger.Sync()
 
-	shutdown, err := telemetry.InitProvider(context.Background(), "account-issuance-service")
+	bgCtx := context.Background()
+	shutdown, err := telemetry.InitProvider(bgCtx, "account-issuance-service")
 	if err != nil {
 		logging.Logger().Fatalw("failed to init telemetry", "error", err)
 	}
-	defer func() { _ = shutdown(context.Background()) }()
+	defer func() { _ = shutdown(bgCtx) }()
 
 	cfg := config.LoadConfig()
 	redisCfg := config.LoadRedisConfig()
@@ -100,12 +101,12 @@ func main() {
 	}()
 
 	// Graceful shutdown
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(bgCtx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	<-ctx.Done()
 
 	logging.Logger().Infow("shutdown signal received")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(bgCtx, 10*time.Second)
 	defer cancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
 	s.GracefulStop()
