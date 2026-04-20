@@ -19,6 +19,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    networks:
+      - pjp-network
 
   redis:
     image: redis:7-alpine
@@ -33,39 +35,76 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    networks:
+      - pjp-network
 
   # ─────────────────────────────────────────────
   #  Messaging
   # ─────────────────────────────────────────────
-  kafka:
-    image: confluentinc/cp-kafka:7.6.0
-    container_name: pjp_kafka
-    ports:
-      - "${KAFKA_EXTERNAL_PORT}:9092"
+  controller-1:
+    image: apache/kafka:latest
+    container_name: controller-1
+    hostname: controller-1
     environment:
       KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:${KAFKA_EXTERNAL_PORT}
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_PROCESS_ROLES: controller
+      KAFKA_LISTENERS: CONTROLLER://:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@controller-1:9093
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID}
+    networks:
+      - pjp-network
+
+  broker:
+    image: apache/kafka:latest
+    container_name: broker
+    hostname: broker
+    ports:
+      - '${KAFKA_EXTERNAL_PORT}:9094'
+    environment:
+      KAFKA_NODE_ID: 2
+      KAFKA_PROCESS_ROLES: broker
+      KAFKA_LISTENERS: 'INTERNAL://:9092,EXTERNAL://:9094'
+      KAFKA_ADVERTISED_LISTENERS: 'INTERNAL://broker:9092,EXTERNAL://localhost:${KAFKA_EXTERNAL_PORT}'
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@controller-1:9093
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
-      KAFKA_NUM_PARTITIONS: 3
-      KAFKA_LOG_RETENTION_HOURS: 168
-      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qg"
-    volumes:
-      - kafkadata:/var/lib/kafka/data
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID}
     healthcheck:
-      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
       interval: 10s
       timeout: 10s
       retries: 10
-      start_period: 30s
+    networks:
+      - pjp-network
+    depends_on:
+      - controller-1
+
+  kafka-init-topics:
+    image: apache/kafka:latest
+    container_name: kafka_init_topics
+    depends_on:
+      broker:
+        condition: service_healthy
+    networks:
+      - pjp-network
+    command: |
+      sh -c "
+      echo 'Waiting for Kafka to be ready...'
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092 --list
+      echo 'Creating topics...'
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092 --create --if-not-exists --topic account_created_v1 --replication-factor 1 --partitions 3
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092 --create --if-not-exists --topic transfer_completed_v1 --replication-factor 1 --partitions 3
+      echo 'Topics created.'
+      "
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -74,10 +113,12 @@ services:
       - "${KAFKA_UI_PORT}:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: pjp-kraft
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: "broker:9092"
     depends_on:
-      kafka:
+      broker:
         condition: service_healthy
+    networks:
+      - pjp-network
 
   # ─────────────────────────────────────────────
   #  Observability
@@ -92,6 +133,8 @@ services:
       - "${LOKI_PORT}:3100"
     command: -config.file=/etc/loki/local-config.yaml
     restart: unless-stopped
+    networks:
+      - pjp-network
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready || exit 1"]
       interval: 10s
@@ -109,6 +152,8 @@ services:
       - "4317:4317" # OTLP gRPC
       - "4318:4318" # OTLP HTTP
     restart: unless-stopped
+    networks:
+      - pjp-network
 
   grafana:
     image: grafana/grafana:latest
@@ -125,6 +170,8 @@ services:
       - loki
       - tempo
     restart: unless-stopped
+    networks:
+      - pjp-network
 
   # ─────────────────────────────────────────────
   #  Application Services
@@ -152,6 +199,8 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       LOKI_URL: http://loki:3100/loki/api/v1/push
     restart: unless-stopped
+    networks:
+      - pjp-network
 
   account-issuance:
     build:
@@ -163,7 +212,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
+      broker:
         condition: service_healthy
       core-banking-system:
         condition: service_started
@@ -181,12 +230,14 @@ services:
       DB_SSLMODE: ${DB_SSLMODE}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      KAFKA_BROKERS: "kafka:29092"
+      KAFKA_BROKERS: "broker:9092"
       CBS_GRPC_ADDR: "core-banking-system:50052"
       GRPC_PORT: ":50051"
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       LOKI_URL: http://loki:3100/loki/api/v1/push
-    restart: unless-stopped
+    restart: unless-stopped 
+    networks:
+      - pjp-network
 
   payment-initiation:
     build:
@@ -198,7 +249,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      kafka:
+      broker:
         condition: service_healthy
       account-issuance:
         condition: service_started
@@ -217,12 +268,14 @@ services:
       DB_SSLMODE: ${DB_SSLMODE}
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      KAFKA_BROKERS: "kafka:29092"
+      KAFKA_BROKERS: "broker:9092"
       AIS_GRPC_ADDR: "account-issuance:50051"
       CBS_GRPC_ADDR: "core-banking-system:50052"
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       LOKI_URL: http://loki:3100/loki/api/v1/push
     restart: unless-stopped
+    networks:
+      - pjp-network
 
   notification:
     build:
@@ -232,7 +285,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      kafka:
+      broker:
         condition: service_healthy
       loki:
         condition: service_healthy
@@ -245,16 +298,25 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
       DB_SSLMODE: ${DB_SSLMODE}
-      KAFKA_BROKERS: "kafka:29092"
+      KAFKA_BROKERS: "broker:9092"
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP}
+      KAFKA_TOPICS: "account_created_v1,transfer_completed_v1"
       WEBHOOK_URL: ${WEBHOOK_URL}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       LOKI_URL: http://loki:3100/loki/api/v1/push
     restart: unless-stopped
+    networks:
+      - pjp-network
 
 volumes:
   pgdata:
     name: pjp_pgdata
   redisdata:
     name: pjp_redisdata
-  kafkadata:
-    name: pjp_kafkadata
+  # kafkadata:
+  #   name: pjp_kafkadata
+
+networks:
+  pjp-network:
+    name: pjp-network
+    driver: bridge
