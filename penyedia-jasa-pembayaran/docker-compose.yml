@@ -273,7 +273,7 @@ services:
       KAFKA_BROKERS: "broker:9092"
       AIS_GRPC_ADDR: "account-issuance:50051"
       CBS_GRPC_ADDR: "core-banking-system:50052"
-      FRAUD_HTTP_ADDR: "fraud-detection:8085"
+      FRAUD_GRPC_ADDR: "fraud-detection:50055"
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       LOKI_URL: http://loki:3100/loki/api/v1/push
     restart: unless-stopped
@@ -292,6 +292,7 @@ services:
         condition: service_healthy
     ports:
       - "${FRAUD_HTTP_PORT:-8085}:8085"
+      - "50055:50055"
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"

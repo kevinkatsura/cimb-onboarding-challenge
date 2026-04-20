@@ -21,6 +21,9 @@ from app.engine.beneficiary import check_new_beneficiary
 from app.engine.device import check_device_change
 from app.engine.dormant import check_dormant_account
 from app.engine.geo import check_geo_anomaly
+from app.telemetry import get_tracer
+
+tracer = get_tracer(__name__)
 
 logger = logging.getLogger("fraud.evaluator")
 
@@ -64,6 +67,16 @@ async def evaluate(
     redis: aioredis.Redis,
     req: EvaluationRequest,
 ) -> EvaluationResult:
+    with tracer.start_as_current_span("fraud.evaluate") as span:
+        span.set_attribute("transaction.id", req.transaction_id)
+        span.set_attribute("account.source", req.source_account_no)
+        return await _evaluate_internal(session, redis, req)
+
+async def _evaluate_internal(
+    session: AsyncSession,
+    redis: aioredis.Redis,
+    req: EvaluationRequest,
+) -> EvaluationResult:
     """Run all active fraud rules and produce a decision.
 
     Steps:
@@ -78,10 +91,11 @@ async def evaluate(
     result = EvaluationResult()
 
     # 1. Load active rules
-    rules_result = await session.execute(
-        select(FraudRule).where(FraudRule.is_active == True)  # noqa: E712
-    )
-    rules = {r.code: r for r in rules_result.scalars().all()}
+    with tracer.start_as_current_span("fraud.load_rules"):
+        rules_result = await session.execute(
+            select(FraudRule).where(FraudRule.is_active == True)  # noqa: E712
+        )
+        rules = {r.code: r for r in rules_result.scalars().all()}
 
     if not rules:
         logger.warning("No active fraud rules found")
@@ -104,18 +118,19 @@ async def evaluate(
     all_details: dict[str, Any] = {}
 
     # ── 3a. Velocity checks ──
-    velocity_results = await check_all_velocities(
-        redis=redis,
-        account_no=req.source_account_no,
-        device_id=req.device_id,
-        source_ip=req.source_ip,
-        beneficiary_no=req.beneficiary_account_no,
-        rules=rule_thresholds,
-    )
-    for vr in velocity_results:
-        all_details[vr["rule_code"]] = vr
-        if vr["triggered"]:
-            triggered.append(vr)
+    with tracer.start_as_current_span("fraud.check_velocity"):
+        velocity_results = await check_all_velocities(
+            redis=redis,
+            account_no=req.source_account_no,
+            device_id=req.device_id,
+            source_ip=req.source_ip,
+            beneficiary_no=req.beneficiary_account_no,
+            rules=rule_thresholds,
+        )
+        for vr in velocity_results:
+            all_details[vr["rule_code"]] = vr
+            if vr["triggered"]:
+                triggered.append(vr)
 
     # ── 3b. Amount anomaly ──
     if "AMT_ANOMALY" in rules:
@@ -212,31 +227,32 @@ async def evaluate(
         else "all checks passed"
     )
 
-    # 5. Persist audit event
-    event_id = uuid.uuid4()
-    result.event_id = str(event_id)
+    # 5. Persist audit event & Update stats
+    with tracer.start_as_current_span("fraud.persistence"):
+        event_id = uuid.uuid4()
+        result.event_id = str(event_id)
 
-    event = FraudEvent(
-        id=event_id,
-        transaction_id=req.transaction_id,
-        partner_reference_no=req.partner_reference_no,
-        reference_no=req.reference_no,
-        source_account_no=req.source_account_no,
-        beneficiary_account_no=req.beneficiary_account_no,
-        amount=req.amount,
-        currency=req.currency,
-        device_id=req.device_id,
-        source_ip=req.source_ip,
-        channel=req.channel,
-        latitude=req.latitude if req.latitude else None,
-        longitude=req.longitude if req.longitude else None,
-        decision=result.decision,
-        risk_score=result.risk_score,
-        triggered_rules=triggered_codes,
-        rule_details=_sanitize_details(all_details),
-        evaluated_at=datetime.now(timezone.utc),
-    )
-    session.add(event)
+        event = FraudEvent(
+            id=event_id,
+            transaction_id=req.transaction_id,
+            partner_reference_no=req.partner_reference_no,
+            reference_no=req.reference_no,
+            source_account_no=req.source_account_no,
+            beneficiary_account_no=req.beneficiary_account_no,
+            amount=req.amount,
+            currency=req.currency,
+            device_id=req.device_id,
+            source_ip=req.source_ip,
+            channel=req.channel,
+            latitude=req.latitude if req.latitude else None,
+            longitude=req.longitude if req.longitude else None,
+            decision=result.decision,
+            risk_score=result.risk_score,
+            triggered_rules=triggered_codes,
+            rule_details=_sanitize_details(all_details),
+            evaluated_at=datetime.now(timezone.utc),
+        )
+        session.add(event)
 
     # 6. Update account stats (online average update)
     now = datetime.now(timezone.utc)

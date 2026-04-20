@@ -1,12 +1,4 @@
-"""Fraud Detection Service — FastAPI application.
-
-Exposes:
-  - GET  /health         — health check
-  - POST /evaluate       — fraud evaluation endpoint (REST)
-  - GET  /rules          — list active fraud rules
-  - GET  /events         — list recent fraud events
-"""
-
+import asyncio
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -17,35 +9,25 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select, desc
 
+# ─── OpenTelemetry ───
 from app.config import settings
+from app.telemetry import init_telemetry, instrument_sqlalchemy, instrument_fastapi
+
+# Initialize telemetry as first step
+init_telemetry(
+    service_name="fraud-detection-service",
+    otlp_endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT
+)
+
+# NOW import our internal modules
 from app.database import async_session, engine
 from app.redis_client import redis_client
 from app.models import FraudRule, FraudEvent
 from app.engine.evaluator import EvaluationRequest, evaluate
+from app.grpc_handler import serve_grpc
 
-# ─── OpenTelemetry ───
-from opentelemetry import trace, propagate
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.instrumentation.redis import RedisInstrumentor
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
-
-# Initialize Tracing with Service Name
-resource = Resource(attributes={
-    SERVICE_NAME: "fraud-detection-service"
-})
-provider = TracerProvider(resource=resource)
-processor = BatchSpanProcessor(OTLPSpanExporter(endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True))
-provider.add_span_processor(processor)
-trace.set_tracer_provider(provider)
-
-# Set the global propagator for distributed tracing (W3C Trace Context)
-propagate.set_global_textmap(TraceContextTextMapPropagator())
+# Instrument engines
+instrument_sqlalchemy(engine.sync_engine)
 
 # ─── Logging ───
 import logging_loki
@@ -69,8 +51,7 @@ console_handler.setFormatter(logging.Formatter(
 ))
 root_logger.addHandler(console_handler)
 
-# Instrument logging with OTEL
-LoggingInstrumentor().instrument(set_logging_format=True)
+# Logging is already instrumented in init_telemetry()
 
 logger = logging.getLogger("fraud.main")
 
@@ -82,8 +63,21 @@ async def lifespan(app: FastAPI):
     logger.info("DB: %s@%s/%s", settings.DB_USER, settings.DB_HOST, settings.DB_NAME)
     logger.info("Redis: %s:%d", settings.REDIS_HOST, settings.REDIS_PORT)
     logger.info("HTTP port: %d", settings.HTTP_PORT)
+    
+    # Initialize Redis
+    await redis_client.initialize()
+    
+    # Start gRPC server in the background
+    grpc_task = asyncio.create_task(serve_grpc(50055))
+    
     yield
+    
     logger.info("Fraud Detection Service shutting down")
+    grpc_task.cancel()
+    try:
+        await grpc_task
+    except asyncio.CancelledError:
+        pass
     await engine.dispose()
     await redis_client.close()
 
@@ -96,14 +90,7 @@ app = FastAPI(
 )
 
 # Instrument FastAPI
-FastAPIInstrumentor.instrument_app(app)
-
-# Instrument SQLAlchemy
-SQLAlchemyInstrumentor().instrument(engine=engine.sync_engine)
-
-# Instrument Redis
-RedisInstrumentor().instrument()
-
+instrument_fastapi(app)
 
 # ─── Pydantic Schemas ───
 class DeviceFingerprintSchema(BaseModel):

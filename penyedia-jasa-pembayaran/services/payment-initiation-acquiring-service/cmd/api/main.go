@@ -91,13 +91,21 @@ func main() {
 	defer cbsConn.Close()
 	ledgerClient := ledgerpb.NewLedgerServiceClient(cbsConn)
 
-	// Fraud Detection Client (HTTP-based)
-	fraudAddr := os.Getenv("FRAUD_HTTP_ADDR")
+	// Fraud Detection Client (gRPC)
+	fraudAddr := os.Getenv("FRAUD_GRPC_ADDR")
 	if fraudAddr == "" {
-		fraudAddr = "localhost:8085"
+		fraudAddr = "localhost:50055"
 	}
-	fraudClient := fraudpb.NewFraudDetectionClient(fraudAddr)
-	logging.Logger().Infow("Fraud detection client configured", "addr", fraudAddr)
+	fraudConn, err := grpc.NewClient(fraudAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
+	if err != nil {
+		logging.Logger().Fatalw("failed to connect to fraud service", "error", err)
+	}
+	defer fraudConn.Close()
+	fraudClient := fraudpb.NewFraudDetectionClient(fraudConn)
+	logging.Logger().Infow("Fraud detection client configured (gRPC)", "addr", fraudAddr)
 
 	// Domain
 	repo := transfer.NewRepository(db)

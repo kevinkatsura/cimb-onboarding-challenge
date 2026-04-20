@@ -1,67 +1,30 @@
 package fraudpb
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"time"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
+	"google.golang.org/grpc"
 )
 
-// FraudDetectionClient is a lightweight HTTP-based client for the fraud
-// detection service. We use HTTP/JSON instead of gRPC on the Go client side
-// because protoc-generated stubs are unavailable. The Python server exposes
-// both gRPC and a /evaluate REST endpoint for this purpose.
+// FraudDetectionClient is a wrapper around the generated gRPC client.
+// It maintains the same interface for the caller but uses gRPC internally.
 type FraudDetectionClient struct {
-	baseURL    string
-	httpClient *http.Client
+	client FraudDetectionServiceClient
 }
 
-// NewFraudDetectionClient creates a new fraud detection client.
-// addr should be like "fraud-detection:8085" (the HTTP port).
-func NewFraudDetectionClient(addr string) *FraudDetectionClient {
+// NewFraudDetectionClient creates a new fraud detection client using an existing gRPC connection.
+func NewFraudDetectionClient(cc grpc.ClientConnInterface) *FraudDetectionClient {
 	return &FraudDetectionClient{
-		baseURL: fmt.Sprintf("http://%s", addr),
-		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
-		},
+		client: NewFraudDetectionServiceClient(cc),
 	}
 }
 
-// EvaluateTransaction calls the fraud detection service to evaluate a transaction.
+// EvaluateTransaction calls the fraud detection service via gRPC.
 func (c *FraudDetectionClient) EvaluateTransaction(ctx context.Context, req *FraudEvaluationRequest) (*FraudEvaluationResponse, error) {
-	body, err := json.Marshal(req)
+	resp, err := c.client.EvaluateTransaction(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("marshal fraud request: %w", err)
+		return nil, fmt.Errorf("fraud gRPC call failed: %w", err)
 	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/evaluate", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("create fraud request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	// Inject tracing headers
-	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(httpReq.Header))
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("fraud service call failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("fraud service returned status %d", resp.StatusCode)
-	}
-
-	var fraudResp FraudEvaluationResponse
-	if err := json.NewDecoder(resp.Body).Decode(&fraudResp); err != nil {
-		return nil, fmt.Errorf("decode fraud response: %w", err)
-	}
-
-	return &fraudResp, nil
+	return resp, nil
 }

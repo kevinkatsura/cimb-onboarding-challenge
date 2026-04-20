@@ -16,5 +16,7 @@ opentelemetry-exporter-otlp==1.28.2
 opentelemetry-instrumentation-logging==0.49b2
 opentelemetry-instrumentation-sqlalchemy==0.49b2
 opentelemetry-instrumentation-redis==0.49b2
+opentelemetry-instrumentation-grpc==0.49b2
+opentelemetry-instrumentation-asyncpg==0.49b2
 python-logging-loki==0.3.1
 psycopg2-binary==2.9.10
