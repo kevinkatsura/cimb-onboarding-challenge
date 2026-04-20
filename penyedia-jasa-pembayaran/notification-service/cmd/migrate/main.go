@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"notification-service/config"
 	"notification-service/pkg/database"
 	"notification-service/pkg/logging"
@@ -10,19 +9,18 @@ import (
 
 func main() {
 	logging.InitLogger()
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: ns-migrate [up|down]")
-		os.Exit(1)
-	}
 	cfg := config.LoadConfig()
+	database.EnsureSchema(cfg)
+
+	if len(os.Args) < 2 {
+		logging.Logger().Fatalw("usage: ns-migrate [up|down]")
+	}
 	switch os.Args[1] {
 	case "up":
-		database.EnsureDatabase(cfg)
 		database.RunMigrateUp(cfg)
 	case "down":
 		database.RunMigrateDown(cfg)
 	default:
-		fmt.Printf("Unknown: %s\n", os.Args[1])
-		os.Exit(1)
+		logging.Logger().Fatalw("unknown command", "cmd", os.Args[1])
 	}
 }

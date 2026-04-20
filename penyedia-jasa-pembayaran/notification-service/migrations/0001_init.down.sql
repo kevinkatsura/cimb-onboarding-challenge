@@ -1,3 +1,1 @@
-SET search_path TO notification;
-DROP TABLE IF EXISTS notifications;
-DROP SCHEMA IF EXISTS notification;
+DROP TABLE IF EXISTS notification.events;

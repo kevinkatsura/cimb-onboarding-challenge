@@ -1,154 +1,160 @@
 package main
 
-// @title Notification Service API
-// @version 1.0
-// @description Kafka consumer and webhook delivery service (PJP)
-// @BasePath /
-
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
+	"time"
 
 	"notification-service/config"
-	_ "notification-service/docs"
-	"notification-service/internal/consumer"
-	"notification-service/internal/notification"
-	"notification-service/internal/webhook"
 	"notification-service/pkg/database"
 	"notification-service/pkg/logging"
-	"notification-service/pkg/telemetry"
 
+	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
-	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 const defaultWebhookURL = "https://webhook.site/d8f3c0ee-ada4-4fb7-a8f3-3b82724505ff"
 
 func main() {
-	logger, _, err := logging.InitLogger()
-	if err != nil {
-		panic(err)
-	}
+	logger, _, _ := logging.InitLogger()
 	defer logger.Sync()
-
-	bgCtx := context.Background()
-
-	shutdown, err := telemetry.InitProvider(bgCtx, "notification-service")
-	if err != nil {
-		logging.Logger().Fatalw("failed to init telemetry", "error", err)
-	}
-	defer func() { _ = shutdown(bgCtx) }()
 
 	cfg := config.LoadConfig()
 	db := database.NewPostgres(cfg)
 	defer db.Close()
 
-	repo := notification.NewRepository(db)
-	webhookClient := webhook.NewClient()
-
+	// Webhook URL
 	webhookURL := os.Getenv("WEBHOOK_URL")
 	if webhookURL == "" {
 		webhookURL = defaultWebhookURL
 	}
 
-	handler := consumer.NewHandler(repo, webhookClient, webhookURL)
-
-	// Kafka consumer
+	// Kafka reader
 	brokers := os.Getenv("KAFKA_BROKERS")
 	if brokers == "" {
 		brokers = "localhost:9092"
 	}
-	topics := []string{"account-created", "transfer-completed"}
+	// Kafka topics mapping
+	topicsEnv := os.Getenv("KAFKA_TOPICS")
+	if topicsEnv == "" {
+		topicsEnv = "account_created_v1,transfer_completed_v1"
+	}
+	topics := strings.Split(topicsEnv, ",")
+
+	// Kafka group ID
+	groupID := os.Getenv("KAFKA_CONSUMER_GROUP")
+	if groupID == "" {
+		groupID = "notification-service-group"
+	}
+
+	dialer := &kafka.Dialer{
+		Timeout:   10 * time.Second,
+		DualStack: true,
+	}
 
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  strings.Split(brokers, ","),
-		GroupID:  "notification-service",
-		Topic:    topics[0], // Primary topic
-		MinBytes: 1,
-		MaxBytes: 10e6,
+		Dialer:      dialer,
+		Brokers:     strings.Split(brokers, ","),
+		GroupID:     groupID,
+		GroupTopics: topics,
+		MinBytes:    1,
+		MaxBytes:    10e6,
+		MaxWait:     1 * time.Second,
+		Logger:      kafka.LoggerFunc(logging.Logger().Debugf),
+		StartOffset: kafka.FirstOffset,
+		ErrorLogger: kafka.LoggerFunc(func(msg string, args ...interface{}) {
+			formatted := fmt.Sprintf(msg, args...)
+			if strings.Contains(formatted, "Group Coordinator Not Available") || strings.Contains(formatted, "EOF") {
+				// Suppress transient coordinator initialization noise emitted when
+				// offsets topic is generating for the very first time dynamically.
+				return
+			}
+			logging.Logger().Errorf(formatted)
+		}),
 	})
+	defer reader.Close()
 
-	// Second reader for transfer-completed
-	reader2 := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:  strings.Split(brokers, ","),
-		GroupID:  "notification-service",
-		Topic:    topics[1],
-		MinBytes: 1,
-		MaxBytes: 10e6,
-	})
-
-	ctx, stop := signal.NotifyContext(bgCtx, syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Health endpoint
-	go func() {
-		mux := http.NewServeMux()
-		// HealthCheck godoc
-		// @Summary      Service Health Check
-		// @Description  Returns the health status of the Notification service
-		// @Tags         System
-		// @Produce      json
-		// @Success      200 {object} map[string]string
-		// @Router       /health [get]
-		mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(200)
-			w.Write([]byte(`{"status":"ok"}`))
-		})
-		mux.Handle("GET /swagger/", httpSwagger.WrapHandler)
-		logging.Logger().Infow("health endpoint starting (health+swagger)", "port", ":8080")
-		http.ListenAndServe(":8080", mux)
-	}()
+	httpClient := &http.Client{Timeout: 3 * time.Second}
 
-	var wg sync.WaitGroup
+	logging.Logger().Infow("notification service started", "topics", topics, "webhook", webhookURL)
 
-	// Consumer loops
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		logging.Logger().Infow("consuming topic", "topic", topics[0])
-		for {
-			msg, err := reader.FetchMessage(ctx)
-			if err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				logging.Logger().Errorw("fetch error", "topic", topics[0], "error", err)
-				continue
+	for {
+		msg, err := reader.FetchMessage(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				break
 			}
-			handler.ProcessMessage(bgCtx, msg)
-			reader.CommitMessages(bgCtx, msg)
+			logging.Logger().Errorw("fetch error", "error", err)
+			continue
 		}
-	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		logging.Logger().Infow("consuming topic", "topic", topics[1])
-		for {
-			msg, err := reader2.FetchMessage(ctx)
-			if err != nil {
-				if ctx.Err() != nil {
-					return
-				}
-				logging.Logger().Errorw("fetch error", "topic", topics[1], "error", err)
-				continue
+		logging.Logger().Infow("event received",
+			"topic", msg.Topic,
+			"key", string(msg.Key),
+			"partition", msg.Partition,
+			"offset", msg.Offset,
+			"payload", string(msg.Value),
+		)
+
+		// 1. Store in DB
+		id := uuid.New()
+		_, err = db.ExecContext(ctx,
+			`INSERT INTO notification.events (id, topic, event_key, payload, webhook_url)
+			 VALUES ($1, $2, $3, $4, $5)`,
+			id, msg.Topic, string(msg.Key), string(msg.Value), webhookURL)
+		if err != nil {
+			logging.Logger().Errorw("db insert failed, will retry", "error", err)
+			continue
+		}
+
+		// 2. POST to webhook
+		webhookData := map[string]interface{}{
+			"eventType": msg.Topic,
+			"data":      json.RawMessage(msg.Value),
+			"timestamp": time.Now().Format(time.RFC3339),
+		}
+		webhookPayload, _ := json.Marshal(webhookData)
+
+		// Verbose log outgoing webhook
+		logging.Logger().Infow("delivering webhook", "id", id.String(), "url", webhookURL, "payload", string(webhookPayload))
+
+		resp, err := httpClient.Post(webhookURL, "application/json", bytes.NewReader(webhookPayload))
+		status := "sent"
+		httpCode := 0
+		if err != nil {
+			logging.Logger().Warnw("webhook delivery failed", "error", err)
+			status = "failed"
+		} else {
+			httpCode = resp.StatusCode
+			resp.Body.Close()
+			if httpCode >= 400 {
+				status = "failed"
 			}
-			handler.ProcessMessage(bgCtx, msg)
-			reader2.CommitMessages(bgCtx, msg)
 		}
-	}()
 
-	logging.Logger().Infow("notification service started", "topics", topics)
-	<-ctx.Done()
+		// 3. Update status
+		_, _ = db.ExecContext(ctx,
+			`UPDATE notification.events SET status = $1, http_code = $2 WHERE id = $3`,
+			status, httpCode, id)
 
-	logging.Logger().Infow("shutting down")
-	wg.Wait()
-	reader.Close()
-	reader2.Close()
+		logging.Logger().Infow("event processed",
+			"id", id.String(), "topic", msg.Topic, "status", status, "http_code", httpCode)
+
+		// 4. Commit offset — marks as read
+		if err := reader.CommitMessages(ctx, msg); err != nil {
+			logging.Logger().Errorw("commit failed", "error", err)
+		}
+	}
+
 	logging.Logger().Infow("notification service stopped")
 }

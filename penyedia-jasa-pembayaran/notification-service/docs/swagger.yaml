@@ -1,8 +1,0 @@
-basePath: /
-info:
-  contact: {}
-  description: Kafka consumer and webhook delivery service (PJP)
-  title: Notification Service API
-  version: "1.0"
-paths: {}
-swagger: "2.0"
