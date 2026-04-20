@@ -19,13 +19,13 @@ import (
 
 	account_informationpb "proto/account_information/v1"
 
-	_ "github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/docs"
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/internal/config"
-	grpcserver "github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/internal/grpc"
-	httpapi "github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/internal/http"
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/internal/kafka"
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/internal/repository"
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/pkg/logging"
+	_ "account-information-service/docs"
+	"account-information-service/internal/config"
+	grpcserver "account-information-service/internal/grpc"
+	httpapi "account-information-service/internal/http"
+	"account-information-service/internal/kafka"
+	"account-information-service/internal/repository"
+	"account-information-service/pkg/logging"
 )
 
 func main() {

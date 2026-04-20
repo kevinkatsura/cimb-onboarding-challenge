@@ -9,8 +9,8 @@ import (
 	"github.com/segmentio/kafka-go"
 	"go.uber.org/zap"
 
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/internal/config"
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/internal/repository"
+	"account-information-service/internal/config"
+	"account-information-service/internal/repository"
 )
 
 type Consumer struct {

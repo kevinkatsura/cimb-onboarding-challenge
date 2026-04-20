@@ -1,9 +1,11 @@
 FROM golang:1.26.2-alpine AS builder
 
 WORKDIR /app
-# Flattened structure: copy service code and proto to subfolder
-COPY services/account-issuance-service .
+# Preserve structure: copy service code and proto to their respective folders
 COPY proto ./proto
+COPY services/account-issuance-service ./services/account-issuance-service
+
+WORKDIR /app/services/account-issuance-service
 
 # Resolve dependencies
 RUN go mod download
@@ -16,7 +18,7 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /ains-api     /usr/local/bin/ains-api
 COPY --from=builder /ains-migrate /usr/local/bin/ains-migrate
-WORKDIR /app
+WORKDIR /app/services/account-issuance-service
 COPY services/account-issuance-service/migrations ./migrations
 COPY services/account-issuance-service/scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

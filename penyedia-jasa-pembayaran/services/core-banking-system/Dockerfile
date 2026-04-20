@@ -1,9 +1,11 @@
 FROM golang:1.26.2-alpine AS builder
 
 WORKDIR /app
-# Flattened structure: copy service code and proto to subfolder
-COPY services/core-banking-system .
+# Preserve structure: copy service code and proto to their respective folders
 COPY proto ./proto
+COPY services/core-banking-system ./services/core-banking-system
+
+WORKDIR /app/services/core-banking-system
 
 # Resolve dependencies
 RUN go mod download
@@ -16,7 +18,7 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /cbs-server  /usr/local/bin/cbs-server
 COPY --from=builder /cbs-migrate /usr/local/bin/cbs-migrate
-WORKDIR /app
+WORKDIR /app/services/core-banking-system
 COPY services/core-banking-system/migrations ./migrations
 COPY services/core-banking-system/scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

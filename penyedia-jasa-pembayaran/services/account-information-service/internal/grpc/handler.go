@@ -6,7 +6,7 @@ import (
 
 	account_informationpb "proto/account_information/v1"
 
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/internal/repository"
+	"account-information-service/internal/repository"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

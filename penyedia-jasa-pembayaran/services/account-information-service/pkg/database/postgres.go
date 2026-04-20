@@ -4,8 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/internal/config"
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/pkg/logging"
+	"account-information-service/internal/config"
+	"account-information-service/pkg/logging"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )

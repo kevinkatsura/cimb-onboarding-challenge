@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/internal/config"
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/pkg/database"
-	"github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service/pkg/logging"
+	"account-information-service/internal/config"
+	"account-information-service/pkg/database"
+	"account-information-service/pkg/logging"
 )
 
 func main() {

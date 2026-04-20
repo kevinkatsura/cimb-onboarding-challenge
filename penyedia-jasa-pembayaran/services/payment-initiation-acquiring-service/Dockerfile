@@ -1,9 +1,11 @@
 FROM golang:1.26.2-alpine AS builder
 
 WORKDIR /app
-# Flattened structure: copy service code and proto to subfolder
-COPY services/payment-initiation-acquiring-service .
+# Preserve structure: copy service code and proto to their respective folders
 COPY proto ./proto
+COPY services/payment-initiation-acquiring-service ./services/payment-initiation-acquiring-service
+
+WORKDIR /app/services/payment-initiation-acquiring-service
 
 # Resolve dependencies
 RUN go mod download
@@ -16,7 +18,7 @@ FROM alpine:latest
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /pias-api     /usr/local/bin/pias-api
 COPY --from=builder /pias-migrate /usr/local/bin/pias-migrate
-WORKDIR /app
+WORKDIR /app/services/payment-initiation-acquiring-service
 COPY services/payment-initiation-acquiring-service/migrations ./migrations
 COPY services/payment-initiation-acquiring-service/scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

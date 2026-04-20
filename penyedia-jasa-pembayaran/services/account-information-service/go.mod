@@ -1,8 +1,8 @@
-module github.com/katsuke/cimb-onboarding-challenge/penyedia-jasa-pembayaran/account-information-service
+module account-information-service
 
 go 1.25.0
 
-replace proto => ./proto
+replace proto => ../../proto
 
 require (
 	github.com/golang-migrate/migrate/v4 v4.19.1
