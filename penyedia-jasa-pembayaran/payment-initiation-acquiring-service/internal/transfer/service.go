@@ -232,8 +232,8 @@ func (s *Service) publishTransferCompleted(ctx context.Context, tx *Transaction,
 		Status:             "completed",
 		CompletedAt:        time.Now().Format(time.RFC3339),
 	}
-	if err := s.producer.Publish(ctx, "transfer-completed", tx.ID.String(), event); err != nil {
-		logging.Ctx(ctx).Errorw("failed to publish transfer-completed event", "error", err)
+	if err := s.producer.Publish(ctx, "transfer_completed_v1", tx.ID.String(), event); err != nil {
+		logging.Ctx(ctx).Errorw("failed to publish transfer_completed_v1 event", "error", err)
 	}
 }
 

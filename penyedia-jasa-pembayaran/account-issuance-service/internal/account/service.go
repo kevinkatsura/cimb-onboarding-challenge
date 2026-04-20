@@ -177,8 +177,8 @@ func (s *Service) publishAccountCreated(ctx context.Context, acc *Account) {
 		Currency:      acc.Currency,
 		CreatedAt:     acc.CreatedAt.Format(time.RFC3339),
 	}
-	if err := s.producer.Publish(ctx, "account-created", acc.ID.String(), event); err != nil {
-		logging.Ctx(ctx).Errorw("failed to publish account-created event", "error", err)
+	if err := s.producer.Publish(ctx, "account_created_v1", acc.ID.String(), event); err != nil {
+		logging.Ctx(ctx).Errorw("failed to publish account_created_v1 event", "error", err)
 	}
 }
 
