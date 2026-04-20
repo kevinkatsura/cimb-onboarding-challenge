@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -69,15 +68,7 @@ func main() {
 		MaxWait:     1 * time.Second,
 		Logger:      kafka.LoggerFunc(logging.Logger().Debugf),
 		StartOffset: kafka.FirstOffset,
-		ErrorLogger: kafka.LoggerFunc(func(msg string, args ...interface{}) {
-			formatted := fmt.Sprintf(msg, args...)
-			if strings.Contains(formatted, "Group Coordinator Not Available") || strings.Contains(formatted, "EOF") {
-				// Suppress transient coordinator initialization noise emitted when
-				// offsets topic is generating for the very first time dynamically.
-				return
-			}
-			logging.Logger().Errorf(formatted)
-		}),
+		ErrorLogger: kafka.LoggerFunc(logging.Logger().Errorf),
 	})
 	defer reader.Close()
 
