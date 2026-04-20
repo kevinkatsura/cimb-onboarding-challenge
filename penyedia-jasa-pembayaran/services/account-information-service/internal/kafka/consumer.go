@@ -34,22 +34,22 @@ func NewConsumer(cfg config.Config, repo *repository.PostgresDatabase, logger *z
 }
 
 type AccountCreatedEvent struct {
-	AccountID     string `json:"account_id"`
-	CustomerID    string `json:"customer_id"`
-	AccountNumber string `json:"account_number"`
-	ProductCode   string `json:"product_code"`
+	AccountID     string `json:"accountId"`
+	CustomerID    string `json:"customerId"`
+	AccountNumber string `json:"accountNumber"`
+	ProductCode   string `json:"productCode"`
 	Currency      string `json:"currency"`
-	Status        string `json:"status"`
+	Status        string `json:"status"` // Optional, might be empty from AINS
 }
 
 type TransferCompletedEvent struct {
-	TransactionID      string `json:"TransactionID"`
-	ReferenceNo        string `json:"ReferenceNo"`
-	Amount             int64  `json:"Amount"`
-	Currency           string `json:"Currency"`
-	SourceAccount      string `json:"SourceAccount"`
-	BeneficiaryAccount string `json:"BeneficiaryAccount"`
-	Status             string `json:"Status"`
+	TransactionID      string `json:"transactionId"`
+	ReferenceNo        string `json:"referenceNo"`
+	Amount             int64  `json:"amount"`
+	Currency           string `json:"currency"`
+	SourceAccount      string `json:"sourceAccount"`
+	BeneficiaryAccount string `json:"beneficiaryAccount"`
+	Status             string `json:"status"`
 }
 
 func (c *Consumer) Start(ctx context.Context) {
@@ -70,13 +70,17 @@ func (c *Consumer) Start(ctx context.Context) {
 			case "account_created_v1":
 				var ev AccountCreatedEvent
 				if err := json.Unmarshal(msg.Value, &ev); err == nil {
+					status := ev.Status
+					if status == "" {
+						status = "active" // Default if not provided
+					}
 					acc := repository.Account{
 						AccountNumber: ev.AccountNumber,
 						AccountID:     ev.AccountID,
 						CustomerID:    ev.CustomerID,
 						ProductCode:   ev.ProductCode,
 						Currency:      ev.Currency,
-						Status:        ev.Status,
+						Status:        status,
 						Balance:       0,
 					}
 					c.repo.UpsertAccount(ctx, acc)

@@ -1,2 +1,3 @@
-DROP TABLE IF EXISTS transactions;
-DROP TABLE IF EXISTS accounts;
+DROP TABLE IF EXISTS ais.transactions;
+DROP TABLE IF EXISTS ais.accounts;
+DROP SCHEMA IF EXISTS ais CASCADE;

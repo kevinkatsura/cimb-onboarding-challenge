@@ -1,4 +1,6 @@
-CREATE TABLE IF NOT EXISTS accounts (
+CREATE SCHEMA IF NOT EXISTS ais;
+
+CREATE TABLE IF NOT EXISTS ais.accounts (
     account_number VARCHAR(50) PRIMARY KEY,
     account_id VARCHAR(100) UNIQUE NOT NULL,
     customer_id VARCHAR(100) NOT NULL,
@@ -10,7 +12,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS transactions (
+CREATE TABLE IF NOT EXISTS ais.transactions (
     id SERIAL PRIMARY KEY,
     transaction_ref VARCHAR(100) UNIQUE NOT NULL,
     source_account_number VARCHAR(50),
@@ -20,6 +22,6 @@ CREATE TABLE IF NOT EXISTS transactions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_transactions_source ON transactions(source_account_number);
-CREATE INDEX idx_transactions_beneficiary ON transactions(beneficiary_account_number);
-CREATE INDEX idx_accounts_id ON accounts(account_id);
+CREATE INDEX idx_transactions_source ON ais.transactions(source_account_number);
+CREATE INDEX idx_transactions_beneficiary ON ais.transactions(beneficiary_account_number);
+CREATE INDEX idx_accounts_id ON ais.accounts(account_id);
