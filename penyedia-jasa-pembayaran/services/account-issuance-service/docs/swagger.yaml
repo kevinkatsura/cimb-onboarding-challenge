@@ -1,0 +1,177 @@
+basePath: /
+definitions:
+  internal_account.RegistrationRequest:
+    properties:
+      countryCode:
+        example: ID
+        type: string
+      customerId:
+        example: 550e8400-e29b-41d4-a716-446655440000
+        type: string
+      deviceId:
+        example: device-abc-123
+        type: string
+      deviceModel:
+        example: iPhone 15 Pro
+        type: string
+      deviceOs:
+        example: iOS 17.0
+        type: string
+      deviceType:
+        example: mobile
+        type: string
+      email:
+        example: kevin@gmail.com
+        type: string
+      lang:
+        example: id-ID
+        type: string
+      locale:
+        example: Jakarta
+        type: string
+      name:
+        example: Kevin Katsura
+        maxLength: 255
+        minLength: 2
+        type: string
+      onboardingPartner:
+        example: CIMB-NIAGA
+        type: string
+      partnerReferenceNo:
+        example: "202311010000000000001"
+        type: string
+      phoneNo:
+        example: "6281234567890"
+        maxLength: 20
+        minLength: 8
+        type: string
+    required:
+    - email
+    - name
+    - partnerReferenceNo
+    - phoneNo
+    type: object
+  internal_grpc.GetAccountRequest:
+    properties:
+      accountNumber:
+        example: "80202604160001"
+        type: string
+    type: object
+  internal_grpc.GetAccountResponse:
+    properties:
+      accountId:
+        example: uuid-acc-123
+        type: string
+      accountNumber:
+        example: "80202604160001"
+        type: string
+      availableBalance:
+        example: 1500000
+        type: integer
+      currency:
+        example: IDR
+        type: string
+      customerId:
+        example: uuid-cust-456
+        type: string
+      productCode:
+        example: savings
+        type: string
+      status:
+        example: active
+        type: string
+    type: object
+info:
+  contact: {}
+  description: API for account registration and management (PJP)
+  title: Account Issuance Service API
+  version: "1.0"
+paths:
+  /grpc/GetAccount:
+    post:
+      consumes:
+      - application/json
+      description: Get account and balance information via gRPC
+      parameters:
+      - description: Account Request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_grpc.GetAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_grpc.GetAccountResponse'
+      summary: Get Account Details (gRPC)
+      tags:
+      - gRPC
+  /v1.0/registration-account-creation:
+    post:
+      consumes:
+      - application/json
+      description: Creates a customer and account atomically (SNAP Service Code 06)
+      parameters:
+      - default: "2026-04-15T10:00:00+07:00"
+        description: Request timestamp
+        in: header
+        name: X-TIMESTAMP
+        required: true
+        type: string
+      - default: PLACEHOLDER
+        description: Digital signature
+        in: header
+        name: X-SIGNATURE
+        required: true
+        type: string
+      - default: PJP-001
+        description: Partner ID
+        in: header
+        name: X-PARTNER-ID
+        required: true
+        type: string
+      - default: ext-001
+        description: External ID
+        in: header
+        name: X-EXTERNAL-ID
+        required: true
+        type: string
+      - default: CH001
+        description: Channel ID
+        in: header
+        name: CHANNEL-ID
+        required: true
+        type: string
+      - description: Registration payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/internal_account.RegistrationRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register a new account
+      tags:
+      - Account
+swagger: "2.0"

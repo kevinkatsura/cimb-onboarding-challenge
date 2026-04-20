@@ -1,0 +1,157 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Internal ledger and balance materialization service (PJP)",
+        "title": "Core Banking System API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "basePath": "/",
+    "paths": {
+        "/grpc/CreateJournalEntry": {
+            "post": {
+                "description": "Create a double-entry journal posting via gRPC",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "gRPC"
+                ],
+                "summary": "Create Journal Entry (gRPC)",
+                "parameters": [
+                    {
+                        "description": "Journal Entry Request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_grpc.CreateJournalEntryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_grpc.CreateJournalEntryResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/grpc/GetBalance": {
+            "post": {
+                "description": "Get current ledger balance for an account via gRPC",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "gRPC"
+                ],
+                "summary": "Get Account Balance (gRPC)",
+                "parameters": [
+                    {
+                        "description": "Balance Request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_grpc.GetBalanceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_grpc.GetBalanceResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "internal_grpc.CreateJournalEntryRequest": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "example": "Transfer to Kevin"
+                },
+                "lines": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_grpc.JournalLineRequest"
+                    }
+                },
+                "transactionRef": {
+                    "type": "string",
+                    "example": "TX-123456"
+                }
+            }
+        },
+        "internal_grpc.CreateJournalEntryResponse": {
+            "type": "object",
+            "properties": {
+                "journalEntryId": {
+                    "type": "string",
+                    "example": "uuid-1234"
+                }
+            }
+        },
+        "internal_grpc.GetBalanceRequest": {
+            "type": "object",
+            "properties": {
+                "accountId": {
+                    "type": "string",
+                    "example": "ACC001"
+                }
+            }
+        },
+        "internal_grpc.GetBalanceResponse": {
+            "type": "object",
+            "properties": {
+                "accountId": {
+                    "type": "string",
+                    "example": "ACC001"
+                },
+                "currency": {
+                    "type": "string",
+                    "example": "IDR"
+                },
+                "currentBalance": {
+                    "type": "integer",
+                    "example": 1000000
+                }
+            }
+        },
+        "internal_grpc.JournalLineRequest": {
+            "type": "object",
+            "properties": {
+                "accountId": {
+                    "type": "string",
+                    "example": "ACC001"
+                },
+                "credit": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "currency": {
+                    "type": "string",
+                    "example": "IDR"
+                },
+                "debit": {
+                    "type": "integer",
+                    "example": 100000
+                }
+            }
+        }
+    }
+}

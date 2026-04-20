@@ -179,7 +179,7 @@ services:
   core-banking-system:
     build:
       context: .
-      dockerfile: ./core-banking-system/Dockerfile
+      dockerfile: ./services/core-banking-system/Dockerfile
     container_name: pjp_core_banking
     depends_on:
       postgres:
@@ -205,7 +205,7 @@ services:
   account-issuance:
     build:
       context: .
-      dockerfile: ./account-issuance-service/Dockerfile
+      dockerfile: ./services/account-issuance-service/Dockerfile
     container_name: pjp_account_issuance
     depends_on:
       postgres:
@@ -219,8 +219,8 @@ services:
       loki:
         condition: service_healthy
     ports:
-      - "${AIS_HTTP_PORT}:8080"
-      - "${AIS_GRPC_PORT}:50051"
+      - "${AINS_HTTP_PORT}:8080"
+      - "${AINS_GRPC_PORT}:50051"
     environment:
       DB_HOST: postgres
       DB_PORT: "5432"
@@ -242,7 +242,7 @@ services:
   payment-initiation:
     build:
       context: .
-      dockerfile: ./payment-initiation-acquiring-service/Dockerfile
+      dockerfile: ./services/payment-initiation-acquiring-service/Dockerfile
     container_name: pjp_payment_initiation
     depends_on:
       postgres:
@@ -277,10 +277,39 @@ services:
     networks:
       - pjp-network
 
+  account-information:
+    build:
+      context: .
+      dockerfile: ./services/account-information-service/Dockerfile
+    container_name: pjp_account_information
+    depends_on:
+      postgres:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    ports:
+      - "${AIS_HTTP_PORT:-8081}:8081"
+      - "${AIS_GRPC_PORT:-50055}:50055"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_SSLMODE: ${DB_SSLMODE}
+      KAFKA_BROKERS: "broker:9092"
+      GRPC_PORT: ":50055"
+      HTTP_PORT: ":8081"
+    restart: unless-stopped
+    networks:
+      - pjp-network
+
   notification:
     build:
       context: .
-      dockerfile: ./notification-service/Dockerfile
+      dockerfile: ./services/notification-service/Dockerfile
     container_name: pjp_notification
     depends_on:
       postgres:

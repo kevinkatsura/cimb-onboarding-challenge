@@ -9,6 +9,7 @@ PROJECT_ROOT=$(pwd)
 PROTO_FILES=(
     "proto/account/v1/account.proto"
     "proto/ledger/v1/ledger.proto"
+    "proto/account_information/v1/account_information.proto"
 )
 
 echo "Generating gRPC stubs..."

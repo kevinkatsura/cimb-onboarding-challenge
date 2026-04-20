@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package ledger.v1;
+
+option go_package = "core-banking-system/proto/ledger/v1;ledgerpb";
+
+service LedgerService {
+  rpc CreateJournalEntry(CreateJournalEntryRequest) returns (CreateJournalEntryResponse);
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+  rpc InitializeAccount(InitializeAccountRequest) returns (InitializeAccountResponse);
+}
+
+message JournalLine {
+  string account_id = 1;
+  int64  debit      = 2;
+  int64  credit     = 3;
+  string currency   = 4;
+}
+
+message CreateJournalEntryRequest {
+  string              transaction_ref = 1;
+  string              description     = 2;
+  repeated JournalLine lines          = 3;
+}
+
+message CreateJournalEntryResponse {
+  string journal_entry_id = 1;
+}
+
+message GetBalanceRequest {
+  string account_id = 1;
+}
+
+message GetBalanceResponse {
+  string account_id      = 1;
+  int64  current_balance = 2;
+  string currency        = 3;
+}
+
+message InitializeAccountRequest {
+  string account_id      = 1;
+  string currency        = 2;
+  int64  initial_balance = 3;
+}
+
+message InitializeAccountResponse {
+  string account_id = 1;
+  int64  balance    = 2;
+}
