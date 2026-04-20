@@ -17,6 +17,8 @@ type Transaction struct {
 	FeeAmount          int64     `db:"fee_amount" json:"feeAmount"`
 	FeeType            string    `db:"fee_type" json:"feeType"`
 	Remark             string    `db:"remark" json:"remark"`
+	FraudDecision      string    `db:"fraud_decision" json:"fraudDecision"`
+	FraudEventID       string    `db:"fraud_event_id" json:"fraudEventId"`
 	CreatedAt          time.Time `db:"created_at" json:"createdAt"`
 	UpdatedAt          time.Time `db:"updated_at" json:"updatedAt"`
 }

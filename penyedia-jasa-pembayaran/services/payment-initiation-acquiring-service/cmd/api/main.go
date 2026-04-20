@@ -23,6 +23,7 @@ import (
 	"payment-initiation-acquiring-service/pkg/telemetry"
 
 	accountpb "proto/account/v1"
+	fraudpb "proto/fraud/v1"
 	ledgerpb "proto/ledger/v1"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -90,9 +91,17 @@ func main() {
 	defer cbsConn.Close()
 	ledgerClient := ledgerpb.NewLedgerServiceClient(cbsConn)
 
+	// Fraud Detection Client (HTTP-based)
+	fraudAddr := os.Getenv("FRAUD_HTTP_ADDR")
+	if fraudAddr == "" {
+		fraudAddr = "localhost:8085"
+	}
+	fraudClient := fraudpb.NewFraudDetectionClient(fraudAddr)
+	logging.Logger().Infow("Fraud detection client configured", "addr", fraudAddr)
+
 	// Domain
 	repo := transfer.NewRepository(db)
-	svc := transfer.NewService(repo, accountClient, ledgerClient, producer, redisClient)
+	svc := transfer.NewService(repo, accountClient, ledgerClient, fraudClient, producer, redisClient)
 	handler := transfer.NewHandler(svc)
 
 	// HTTP Server

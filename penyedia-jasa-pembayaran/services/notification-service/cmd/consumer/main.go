@@ -19,7 +19,7 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-const defaultWebhookURL = "https://webhook.site/d8f3c0ee-ada4-4fb7-a8f3-3b82724505ff"
+const defaultWebhookURL = "https://green-falcon-71.webhook.cool"
 
 func main() {
 	logger, _, _ := logging.InitLogger()

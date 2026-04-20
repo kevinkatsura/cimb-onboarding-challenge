@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package fraud.v1;
+
+option go_package = "proto/fraud/v1;fraudpb";
+
+service FraudDetectionService {
+  rpc EvaluateTransaction(FraudEvaluationRequest) returns (FraudEvaluationResponse);
+}
+
+enum Decision {
+  ALLOW     = 0;
+  CHALLENGE = 1;
+  BLOCK     = 2;
+  REVIEW    = 3;
+}
+
+message DeviceFingerprint {
+  string user_agent        = 1;
+  string platform          = 2;
+  string screen_resolution = 3;
+  string timezone          = 4;
+}
+
+message FraudEvaluationRequest {
+  string            transaction_id        = 1;
+  string            partner_reference_no  = 2;
+  string            reference_no          = 3;
+  string            source_account_no     = 4;
+  string            beneficiary_account_no = 5;
+  int64             amount                = 6;
+  string            currency              = 7;
+  string            source_ip             = 8;
+  string            device_id             = 9;
+  DeviceFingerprint device_fingerprint    = 10;
+  string            channel               = 11;
+  double            latitude              = 12;
+  double            longitude             = 13;
+}
+
+message FraudEvaluationResponse {
+  Decision        decision        = 1;
+  double          risk_score      = 2;
+  repeated string triggered_rules = 3;
+  string          event_id        = 4;
+  string          message         = 5;
+}

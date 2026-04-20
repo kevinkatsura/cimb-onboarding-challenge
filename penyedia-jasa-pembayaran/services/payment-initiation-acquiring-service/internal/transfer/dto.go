@@ -20,6 +20,24 @@ type AccountField struct {
 	AccountNo string `json:"accountNo" validate:"required" example:"8001234567890123"`
 }
 
+// FraudContext carries device, IP, and geolocation data for fraud evaluation.
+type FraudContext struct {
+	DeviceID         string  `json:"deviceId,omitempty"`
+	UserAgent        string  `json:"userAgent,omitempty"`
+	Platform         string  `json:"platform,omitempty"`
+	ScreenResolution string  `json:"screenResolution,omitempty"`
+	Timezone         string  `json:"timezone,omitempty"`
+	SourceIP         string  `json:"sourceIp,omitempty"`
+	Channel          string  `json:"channel,omitempty"`
+	Latitude         float64 `json:"latitude,omitempty"`
+	Longitude        float64 `json:"longitude,omitempty"`
+}
+
+// AdditionalInfo carries optional metadata alongside the transfer request.
+type AdditionalInfo struct {
+	FraudContext *FraudContext `json:"fraudContext,omitempty"`
+}
+
 // TransferResponse is the SNAP-compliant response.
 type TransferResponse struct {
 	PartnerReferenceNo string `json:"partnerReferenceNo" example:"202311010000000000002"`
@@ -31,4 +49,5 @@ type TransferResponse struct {
 	SourceAccount      string `json:"sourceAccount" example:"8001234567890123"`
 	BeneficiaryAccount string `json:"beneficiaryAccount" example:"8007776665554443"`
 	Status             string `json:"status" example:"SUCCESS"`
+	FraudDecision      string `json:"fraudDecision,omitempty"`
 }

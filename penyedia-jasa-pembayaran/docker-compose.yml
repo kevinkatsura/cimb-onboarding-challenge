@@ -255,6 +255,8 @@ services:
         condition: service_started
       core-banking-system:
         condition: service_started
+      fraud-detection:
+        condition: service_started
       loki:
         condition: service_healthy
     ports:
@@ -271,6 +273,36 @@ services:
       KAFKA_BROKERS: "broker:9092"
       AIS_GRPC_ADDR: "account-issuance:50051"
       CBS_GRPC_ADDR: "core-banking-system:50052"
+      FRAUD_HTTP_ADDR: "fraud-detection:8085"
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      LOKI_URL: http://loki:3100/loki/api/v1/push
+    restart: unless-stopped
+    networks:
+      - pjp-network
+
+  fraud-detection:
+    build:
+      context: .
+      dockerfile: ./services/fraud-detection-service/Dockerfile
+    container_name: pjp_fraud_detection
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${FRAUD_HTTP_PORT:-8085}:8085"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_SSLMODE: ${DB_SSLMODE}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      HTTP_PORT: "8085"
+      AIS_GRPC_ADDR: "account-information:50055"
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       LOKI_URL: http://loki:3100/loki/api/v1/push
     restart: unless-stopped

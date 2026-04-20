@@ -19,8 +19,8 @@ func NewRepository(db *sqlx.DB) *PostgresRepository {
 func (r *PostgresRepository) CreateTransaction(ctx context.Context, tx *Transaction) error {
 	_, err := r.db.NamedExecContext(ctx,
 		`INSERT INTO payment_initiation.transactions
-		(id, partner_reference_no, reference_no, type, status, amount, currency, fee_amount, fee_type, remark)
-		VALUES (:id, :partner_reference_no, :reference_no, :type, :status, :amount, :currency, :fee_amount, :fee_type, :remark)`, tx)
+		(id, partner_reference_no, reference_no, type, status, amount, currency, fee_amount, fee_type, remark, fraud_decision, fraud_event_id)
+		VALUES (:id, :partner_reference_no, :reference_no, :type, :status, :amount, :currency, :fee_amount, :fee_type, :remark, :fraud_decision, :fraud_event_id)`, tx)
 	return err
 }
 

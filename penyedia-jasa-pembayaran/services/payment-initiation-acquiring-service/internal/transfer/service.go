@@ -13,6 +13,7 @@ import (
 	"payment-initiation-acquiring-service/pkg/telemetry"
 
 	accountpb "proto/account/v1"
+	fraudpb "proto/fraud/v1"
 	ledgerpb "proto/ledger/v1"
 
 	"github.com/google/uuid"
@@ -26,6 +27,7 @@ type Service struct {
 	repo          Repository
 	accountClient accountpb.AccountServiceClient
 	ledgerClient  ledgerpb.LedgerServiceClient
+	fraudClient   *fraudpb.FraudDetectionClient
 	producer      messaging.Producer
 	redis         *redis.Client
 }
@@ -34,6 +36,7 @@ func NewService(
 	repo Repository,
 	accountClient accountpb.AccountServiceClient,
 	ledgerClient ledgerpb.LedgerServiceClient,
+	fraudClient *fraudpb.FraudDetectionClient,
 	producer messaging.Producer,
 	redisClient *redis.Client,
 ) *Service {
@@ -41,6 +44,7 @@ func NewService(
 		repo:          repo,
 		accountClient: accountClient,
 		ledgerClient:  ledgerClient,
+		fraudClient:   fraudClient,
 		producer:      producer,
 		redis:         redisClient,
 	}
@@ -116,9 +120,120 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) (*TransferR
 		}
 	}
 
-	// 6. Create transaction record
+	// 5.5. Fraud detection — evaluate before committing to ledger
 	txID := uuid.New()
 	refNo := fmt.Sprintf("REF%s", txID.String()[:12])
+
+	var fraudDecision string
+	var fraudEventID string
+
+	if s.fraudClient != nil {
+		fraudReq := &fraudpb.FraudEvaluationRequest{
+			TransactionId:        txID.String(),
+			PartnerReferenceNo:   req.PartnerReferenceNo,
+			ReferenceNo:          refNo,
+			SourceAccountNo:      req.SourceAccount.AccountNo,
+			BeneficiaryAccountNo: req.BeneficiaryAccount.AccountNo,
+			Amount:               amount,
+			Currency:             req.Amount.Currency,
+		}
+
+		// Populate fraud context from AdditionalInfo safely
+		if req.AdditionalInfo != nil {
+			if infoMap, ok := req.AdditionalInfo.(map[string]interface{}); ok {
+				if fcObj, ok := infoMap["fraudContext"].(map[string]interface{}); ok {
+					fraudReq.SourceIp = getStr(fcObj, "sourceIp")
+					fraudReq.DeviceId = getStr(fcObj, "deviceId")
+					fraudReq.Channel = getStr(fcObj, "channel")
+					fraudReq.Latitude = getFloat(fcObj, "latitude")
+					fraudReq.Longitude = getFloat(fcObj, "longitude")
+					fraudReq.DeviceFingerprint = &fraudpb.DeviceFingerprint{
+						UserAgent:        getStr(fcObj, "userAgent"),
+						Platform:         getStr(fcObj, "platform"),
+						ScreenResolution: getStr(fcObj, "screenResolution"),
+						Timezone:         getStr(fcObj, "timezone"),
+					}
+				}
+			}
+		}
+
+		fraudResp, fraudErr := s.fraudClient.EvaluateTransaction(ctx, fraudReq)
+		if fraudErr != nil {
+			// Fail-open: log warning and proceed
+			logging.Ctx(ctx).Warnw("fraud service unavailable, proceeding (fail-open)",
+				"error", fraudErr, "transaction_id", txID.String())
+			fraudDecision = "allow"
+		} else {
+			fraudDecision = string(fraudResp.Decision.String())
+			fraudEventID = fraudResp.EventId
+
+			span.SetAttributes(
+				attribute.String("fraud_decision", fraudDecision),
+				attribute.Float64("fraud_risk_score", fraudResp.RiskScore),
+			)
+
+			logging.Ctx(ctx).Infow("fraud evaluation result",
+				"decision", fraudDecision,
+				"risk_score", fraudResp.RiskScore,
+				"triggered_rules", fraudResp.TriggeredRules,
+				"event_id", fraudResp.EventId,
+			)
+
+			switch fraudResp.Decision {
+			case fraudpb.Decision_BLOCK:
+				logging.Ctx(ctx).Warnw("transaction BLOCKED by fraud detection",
+					"transaction_id", txID.String(),
+					"triggered_rules", fraudResp.TriggeredRules,
+				)
+				return nil, apperror.NewBadRequest("transaction blocked by fraud detection system")
+
+			case fraudpb.Decision_REVIEW:
+				logging.Ctx(ctx).Warnw("transaction flagged for REVIEW",
+					"transaction_id", txID.String(),
+					"triggered_rules", fraudResp.TriggeredRules,
+				)
+				// Create transaction with pending_review status and return
+				tx := &Transaction{
+					ID:                 txID,
+					PartnerReferenceNo: req.PartnerReferenceNo,
+					ReferenceNo:        refNo,
+					Type:               "intrabank",
+					Status:             "pending_review",
+					Amount:             amount,
+					Currency:           req.Amount.Currency,
+					FeeAmount:          feeAmount,
+					FeeType:            feeType,
+					Remark:             req.Remark,
+					FraudDecision:      fraudDecision,
+					FraudEventID:       fraudEventID,
+				}
+				if createErr := s.repo.CreateTransaction(ctx, tx); createErr != nil {
+					return nil, apperror.NewInternal("failed to create transaction", createErr)
+				}
+				return &TransferResponse{
+					PartnerReferenceNo: req.PartnerReferenceNo,
+					ReferenceNo:        refNo,
+					Amount:             req.Amount.Value,
+					Currency:           req.Amount.Currency,
+					FeeAmount:          fmt.Sprintf("%.2f", float64(feeAmount)),
+					FeeType:            feeType,
+					SourceAccount:      req.SourceAccount.AccountNo,
+					BeneficiaryAccount: req.BeneficiaryAccount.AccountNo,
+					Status:             "pending_review",
+					FraudDecision:      fraudDecision,
+				}, nil
+
+			case fraudpb.Decision_CHALLENGE:
+				logging.Ctx(ctx).Warnw("fraud CHALLENGE triggered, proceeding for now",
+					"transaction_id", txID.String(),
+					"triggered_rules", fraudResp.TriggeredRules,
+				)
+				// Continue with normal flow — challenge could require OTP in future
+			}
+		}
+	}
+
+	// 6. Create transaction record
 	tx := &Transaction{
 		ID:                 txID,
 		PartnerReferenceNo: req.PartnerReferenceNo,
@@ -130,6 +245,8 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) (*TransferR
 		FeeAmount:          feeAmount,
 		FeeType:            feeType,
 		Remark:             req.Remark,
+		FraudDecision:      fraudDecision,
+		FraudEventID:       fraudEventID,
 	}
 	if err := s.repo.CreateTransaction(ctx, tx); err != nil {
 		return nil, apperror.NewInternal("failed to create transaction", err)
@@ -182,6 +299,7 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) (*TransferR
 		SourceAccount:      req.SourceAccount.AccountNo,
 		BeneficiaryAccount: req.BeneficiaryAccount.AccountNo,
 		Status:             "completed",
+		FraudDecision:      fraudDecision,
 	}
 
 	// 9. Cache for idempotency
@@ -195,7 +313,7 @@ func (s *Service) Transfer(ctx context.Context, req TransferRequest) (*TransferR
 
 	logging.Ctx(ctx).Infow("transfer completed",
 		"transaction_id", txID.String(), "ref_no", refNo,
-		"amount", amount, "fee", feeAmount)
+		"amount", amount, "fee", feeAmount, "fraud_decision", fraudDecision)
 	return resp, nil
 }
 
@@ -242,4 +360,26 @@ func defaultStr(v, fb string) string {
 		return fb
 	}
 	return v
+}
+
+func getStr(m map[string]interface{}, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+func getFloat(m map[string]interface{}, key string) float64 {
+	switch v := m[key].(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	default:
+		return 0.0
+	}
 }
